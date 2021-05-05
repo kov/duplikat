@@ -1,0 +1,44 @@
+[package]
+name = "duplikat"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies.gio]
+git = "https://github.com/gtk-rs/gtk-rs/"
+
+[dependencies.glib]
+git = "https://github.com/gtk-rs/gtk-rs/"
+
+[dependencies.gtk]
+git = "https://github.com/gtk-rs/gtk4-rs"
+package = "gtk4"
+
+[dependencies.libadwaita]
+git = "https://gitlab.gnome.org/bilelmoussaoui/libadwaita-rs"
+
+[dependencies.gtk-macros]
+version = "0.2.0"
+
+[dependencies.gettext-rs]
+version = "0.4.4"
+features = ["gettext-system"]
+
+[dependencies.duplikat-types]
+path = "./duplikat-types"
+
+[dependencies.thiserror]
+version = "1.0.20"
+
+[dependencies.serde]
+version = "1.0"
+
+[dependencies.serde_json]
+version = "1.0"
+
+[dependencies.isahc]
+version = "0.9"
+features = ["json"]
+
+[dependencies.reqwest]
+version = "0.11"
+features = ["blocking", "json"]

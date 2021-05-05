@@ -1,0 +1,16 @@
+# gnome-builder
+.buildconfig
+.vscode
+
+# cargo locks we don't want to keep; meson seems to want its own to be there
+duplikatd/Cargo.lock
+duplikat-types/Cargo.lock
+
+# build-specific configuration?
+src/config.rs
+
+# local directories
+build
+builddir
+target
+

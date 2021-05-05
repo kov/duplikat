@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated with glade 3.38.2 -->
+<interface>
+  <requires lib="gtk+" version="4.0"/>
+  <object class="GtkApplicationWindow" id="window">
+    <property name="can-focus">True</property>
+    <property name="default-width">600</property>
+    <property name="default-height">300</property>
+    <child>
+      <object class="GtkListBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+          <child>
+            <object class="AdwExpanderRow" id="action_expander_row">
+              <property name="title" translatable="yes">Expander row with an action</property>
+              <child type="action">
+                <object class="GtkButton">
+                  <property name="valign">center</property>
+                  <property name="icon-name">row-copy-symbolic</property>
+                  <style>
+                    <class name="outline"/>
+                  </style>
+                </object>
+              </child>
+              <child>
+                <object class="AdwActionRow">
+                  <property name="title" translatable="yes">A nested row</property>
+                </object>
+              </child>
+              <child>
+                <object class="AdwActionRow">
+                  <property name="title" translatable="yes">Another nested row</property>
+                </object>
+              </child>
+            </object>
+          </child>
+      </object>
+    </child>
+    <child type="titlebar">
+      <object class="GtkHeaderBar" id="header_bar">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+  </object>
+</interface>

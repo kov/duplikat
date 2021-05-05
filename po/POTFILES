@@ -1,0 +1,4 @@
+data/br.dev.kov.Duplikat.desktop.in
+data/br.dev.kov.Duplikat.appdata.xml.in
+data/br.dev.kov.Duplikat.gschema.xml
+src/window.ui
