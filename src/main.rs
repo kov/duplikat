@@ -29,6 +29,19 @@ fn main() {
 
         window.widget.set_application(Some(app));
         app.add_window(&window.widget);
+
+        // win.add
+        let w = window.clone();
+        action!(
+            window.widget,
+            "add",
+            move |action, _| {
+                w.create_backup();
+            }
+        );
+
+        app.set_accels_for_action("win.add", &[]);
+
         window.widget.present();
     });
 

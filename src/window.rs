@@ -1,5 +1,6 @@
 use isahc::prelude::*;
 use duplikat_types::*;
+use std::rc::Rc;
 use crate::widgets::BackupRow;
 
 async fn get_backups_list(list_box: gtk::ListBox) {
@@ -24,10 +25,11 @@ async fn get_backups_list(list_box: gtk::ListBox) {
 
 pub struct Window {
     pub widget: gtk::ApplicationWindow,
+    pub builder: gtk::Builder,
 }
 
 impl Window {
-    pub fn new() -> Self {
+    pub fn new() -> Rc<Self> {
         let builder = gtk::Builder::new();
         builder.add_from_resource("/br/dev/kov/Duplikat/window.ui")
             .expect("Failed to load ui file.");
@@ -59,6 +61,11 @@ impl Window {
         println!("{:#?}", res);
         println!("{}", res.text().unwrap());
 
-        Self { widget }
+        Rc::new(Self { widget, builder })
+    }
+
+    pub fn create_backup(&self) {
+        get_widget!(self.builder, gtk::Stack, main_view);
+        main_view.set_visible_child_name("create");
     }
 }
