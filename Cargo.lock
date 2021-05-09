@@ -166,6 +166,7 @@ dependencies = [
  "gtk4",
  "isahc",
  "libadwaita",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",
@@ -546,9 +547,9 @@ dependencies = [
 
 [[package]]
 name = "gtk-macros"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1874c48e670519ce192093ac906c08a6dde7cb2d18b28722ef237726a39c3a63"
+checksum = "da5bf7748fd4cd0b2490df8debcc911809dbcbee4ece9531b96c29a9c729de5a"
 
 [[package]]
 name = "gtk4"

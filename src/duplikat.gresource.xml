@@ -2,5 +2,6 @@
 <gresources>
   <gresource prefix="/br/dev/kov/Duplikat">
     <file>window.ui</file>
+    <file>widgets/backup_row.ui</file>
   </gresource>
 </gresources>

@@ -17,7 +17,7 @@ package = "gtk4"
 git = "https://gitlab.gnome.org/bilelmoussaoui/libadwaita-rs"
 
 [dependencies.gtk-macros]
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies.gettext-rs]
 version = "0.4.4"
@@ -25,6 +25,9 @@ features = ["gettext-system"]
 
 [dependencies.duplikat-types]
 path = "./duplikat-types"
+
+[dependencies.once_cell]
+version = "1"
 
 [dependencies.thiserror]
 version = "1.0.20"

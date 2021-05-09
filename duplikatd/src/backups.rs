@@ -7,15 +7,26 @@ routes! {
 }
 
 fn list_backups(_: Request) -> impl Responder {
-    let backups = vec![Backup {
-        name: "uva".to_string(),
-        repository: Repository {
-            kind: RepositoryKind::B2,
-            identifier: "fedora-vm-uva".to_string(),
-            path: "/system".to_string(),
+    let backups = vec![
+        Backup {
+            name: "uva".to_string(),
+            repository: Repository {
+                kind: RepositoryKind::B2,
+                identifier: "fedora-vm-uva".to_string(),
+                path: "/system".to_string(),
+            },
+            password: "pass".to_string()
         },
-        password: "pass".to_string()
-    }];
+        Backup {
+            name: "pera".to_string(),
+            repository: Repository {
+                kind: RepositoryKind::B2,
+                identifier: "mini-m1-pera".to_string(),
+                path: "/system".to_string(),
+            },
+            password: "pass".to_string()
+        }
+    ];
     Response::from(200)
         .with_json(backups)
 }

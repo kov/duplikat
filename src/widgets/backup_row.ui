@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="BackupRow" parent="AdwExpanderRow">
+    <property name="activatable">True</property>
+    <property name="selectable">False</property>
+    <child>
+      <object class="GtkImage">
+        <property name="icon-name">external-link-symbolic</property>
+        <style>
+          <class name="dim-label"/>
+        </style>
+      </object>
+    </child>
+  </template>
+</interface>
