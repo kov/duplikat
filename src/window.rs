@@ -1,5 +1,7 @@
 use isahc::prelude::*;
 use duplikat_types::*;
+use glib::clone;
+use gtk::prelude::WidgetExt;
 use std::rc::Rc;
 use crate::widgets::BackupRow;
 
@@ -23,6 +25,11 @@ async fn get_backups_list(list_box: gtk::ListBox) {
     }
 }
 
+pub enum WindowViews {
+    List,
+    Create,
+}
+
 pub struct Window {
     pub widget: gtk::ApplicationWindow,
     pub builder: gtk::Builder,
@@ -43,6 +50,60 @@ impl Window {
             get_backups_list(list_box)
         );
 
+        let myself = Rc::new(Self { widget, builder });
+
+        get_widget!(myself.builder, gtk::Stack, main_view);
+        main_view.connect_visible_child_notify(
+            clone!(@weak myself => move |_| {
+                myself.update_state();
+            }),
+        );
+
+        myself.update_state();
+
+        myself
+    }
+
+    pub fn set_view(&self, view: WindowViews) {
+        get_widget!(self.builder, gtk::Stack, main_view);
+
+        let child_name = match view {
+            WindowViews::List => "list",
+            WindowViews::Create => "create",
+        };
+
+        main_view.set_visible_child_name(child_name);
+    }
+
+    fn update_state(&self) {
+        get_widget!(self.builder, gtk::Stack, main_view);
+
+        let visible_child_name = main_view
+            .visible_child_name()
+            .map(|s| s.to_string())
+            .unwrap_or("none".to_string());
+
+        get_widget!(self.builder, gtk::Widget, win_add);
+        get_widget!(self.builder, gtk::Widget, win_go_previous);
+
+        match visible_child_name.as_str() {
+            "list" => {
+                win_add.show();
+                win_go_previous.hide();
+            },
+            "create" => {
+                win_add.hide();
+                win_go_previous.show();
+
+                self.create_backup();
+            },
+            _ => {
+                unimplemented!();
+            }
+        }
+    }
+
+    fn create_backup(&self) {
         // Simple test
         let backup = Backup {
             name: "uva".to_string(),
@@ -60,12 +121,5 @@ impl Window {
             .send().unwrap();
         println!("{:#?}", res);
         println!("{}", res.text().unwrap());
-
-        Rc::new(Self { widget, builder })
-    }
-
-    pub fn create_backup(&self) {
-        get_widget!(self.builder, gtk::Stack, main_view);
-        main_view.set_visible_child_name("create");
     }
 }

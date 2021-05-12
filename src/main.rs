@@ -7,7 +7,7 @@ use gtk::prelude::*;
 mod config;
 mod widgets;
 mod window;
-use crate::window::Window;
+use crate::window::{Window, WindowViews};
 
 fn main() {
     gtk::init().unwrap_or_else(|_| panic!("Failed to initialize GTK."));
@@ -35,12 +35,23 @@ fn main() {
         action!(
             window.widget,
             "add",
-            move |action, _| {
-                w.create_backup();
+            move |_, _| {
+                w.set_view(WindowViews::Create);
+            }
+        );
+
+        // win.go-previous
+        let w = window.clone();
+        action!(
+            window.widget,
+            "go-previous",
+            move |_, _| {
+                w.set_view(WindowViews::List);
             }
         );
 
         app.set_accels_for_action("win.add", &[]);
+        app.set_accels_for_action("win.go-previous", &["Escape"]);
 
         window.widget.present();
     });
