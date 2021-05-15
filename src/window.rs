@@ -1,7 +1,8 @@
 use isahc::prelude::*;
 use duplikat_types::*;
-use glib::clone;
+use glib::{Cast, ObjectExt, clone};
 use gtk::prelude::WidgetExt;
+use libadwaita::prelude::ComboRowExt;
 use std::rc::Rc;
 use crate::widgets::BackupRow;
 
@@ -50,6 +51,9 @@ impl Window {
             get_backups_list(list_box)
         );
 
+        get_widget!(builder, libadwaita::ComboRow, backup_destination_type);
+        Window::setup_destination_type_signals(builder.clone(), backup_destination_type);
+
         let myself = Rc::new(Self { widget, builder });
 
         get_widget!(myself.builder, gtk::Stack, main_view);
@@ -73,6 +77,34 @@ impl Window {
         };
 
         main_view.set_visible_child_name(child_name);
+    }
+
+    fn setup_destination_type_signals(builder: gtk::Builder, destination_type: libadwaita::ComboRow) {
+        destination_type.connect_property_selected_item_notify(
+            clone!(@weak destination_type => move |_| {
+                get_widget!(builder, gtk::Widget, backup_local_path);
+                backup_local_path.hide();
+
+                get_widget!(builder, gtk::Widget, backup_sftp_host);
+                backup_sftp_host.hide();
+
+                get_widget!(builder, gtk::Widget, backup_b2_bucket);
+                backup_b2_bucket.hide();
+
+                let item_name = destination_type.selected_item()
+                    .unwrap() // there must be an item
+                    .downcast::<gtk::StringObject>()
+                    .unwrap() // there must be a valid string
+                    .string()
+                    .to_string();
+
+                match RepositoryKind::from(item_name.as_str()) {
+                    RepositoryKind::Local => backup_local_path.show(),
+                    RepositoryKind::SFTP => backup_sftp_host.show(),
+                    RepositoryKind::B2 => backup_b2_bucket.show(),
+                }
+            })
+        );
     }
 
     fn update_state(&self) {

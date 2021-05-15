@@ -8,6 +8,27 @@ pub enum RepositoryKind {
     B2,
 }
 
+impl ToString for RepositoryKind {
+    fn to_string(&self) -> String {
+        match self {
+            RepositoryKind::Local => "Local Directory".to_string(),
+            RepositoryKind::SFTP => "SFTP".to_string(),
+            RepositoryKind::B2 => "Backblaze B2".to_string(),
+        }
+    }
+}
+
+impl From<&str> for RepositoryKind {
+    fn from(string: &str) -> Self {
+        match string {
+            "Local Directory" => RepositoryKind::Local,
+            "SFTP" => RepositoryKind::SFTP,
+            "Backblaze B2" => RepositoryKind::B2,
+            _ => unimplemented!()
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Repository {
     pub kind: RepositoryKind,

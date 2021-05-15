@@ -36,13 +36,68 @@
                     <child>
                       <object class="AdwPreferencesGroup">
                         <child>
+                          <object class="AdwComboRow" id="backup_destination_type">
+                            <property name="title" translatable="yes">Destination type</property>
+                            <property name="visible">True</property>
+                            <property name="model">
+                              <object class="GtkStringList">
+                                <items>
+                                  <item>Local Directory</item>
+                                  <item>SFTP</item>
+                                  <item>Backblaze B2</item>
+                                </items>
+                              </object>
+                            </property>
+                          </object>
+                        </child>
+                        <child>
                           <object class="AdwActionRow">
                             <property name="title" translatable="yes">Name</property>
                             <property name="visible">True</property>
                             <child>
                               <object class="GtkEntry" id="backup_name_entry">
                                 <property name="hexpand">True</property>
-                                <property name="secondary-icon-name">edit-clear-symbolic</property>
+                                <property name="valign">center</property>
+                                <property name="visible">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <!-- These will show depending on the choice for the Combo above -->
+                        <child>
+                          <object class="AdwActionRow" id="backup_local_path">
+                            <property name="title" translatable="yes">Path</property>
+                            <property name="visible">True</property>
+                            <child>
+                              <object class="GtkButton" id="backup_local_path_button">
+                                <property name="hexpand">True</property>
+                                <property name="valign">center</property>
+                                <property name="visible">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwActionRow" id="backup_sftp_host">
+                            <property name="title" translatable="yes">Host</property>
+                            <property name="visible">False</property>
+                            <child>
+                              <object class="GtkEntry" id="backup_host_entry">
+                                <property name="hexpand">True</property>
+                                <property name="valign">center</property>
+                                <property name="visible">True</property>
+                                <property name="placeholder-text"  translatable="yes">user@hostname</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwActionRow" id="backup_b2_bucket">
+                            <property name="title" translatable="yes">Bucket name</property>
+                            <property name="visible">False</property>
+                            <child>
+                              <object class="GtkEntry" id="backup_b2_bucket_entry">
+                                <property name="hexpand">True</property>
                                 <property name="valign">center</property>
                                 <property name="visible">True</property>
                               </object>
