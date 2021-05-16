@@ -1,5 +1,6 @@
-use vial::prelude::*;
 use duplikat_types::*;
+use vial::prelude::*;
+use crate::restic::Configuration;
 
 routes! {
     GET "/backups" => list_backups;
@@ -34,6 +35,10 @@ fn list_backups(_: Request) -> impl Responder {
 fn create_backup(req: Request) -> impl Responder {
     let backup = req.json::<Backup>().unwrap();
     println!("{:#?}", backup);
+
+    let configuration = Configuration::new(&backup);
+    println!("{:#?}", configuration);
+
     Response::from(200)
         .with_json(backup)
 }

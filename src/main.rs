@@ -40,6 +40,16 @@ fn main() {
             }
         );
 
+        // win.add-finish
+        let w = window.clone();
+        action!(
+            window.widget,
+            "add-finish",
+            move |_, _| {
+                w.create_backup();
+            }
+        );
+
         // win.go-previous
         let w = window.clone();
         action!(

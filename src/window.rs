@@ -1,8 +1,10 @@
 use isahc::prelude::*;
 use duplikat_types::*;
-use glib::{Cast, ObjectExt, clone};
-use gtk::prelude::WidgetExt;
-use libadwaita::prelude::ComboRowExt;
+use glib::{Cast, clone};
+use gtk::prelude::{
+    ButtonExt, ComboBoxExt, EditableExt, FileChooserExt,
+    FileExt, NativeDialogExt, WidgetExt
+};
 use std::rc::Rc;
 use crate::widgets::BackupRow;
 
@@ -51,8 +53,7 @@ impl Window {
             get_backups_list(list_box)
         );
 
-        get_widget!(builder, libadwaita::ComboRow, backup_destination_type);
-        Window::setup_destination_type_signals(builder.clone(), backup_destination_type);
+        Window::setup_signals(builder.clone());
 
         let myself = Rc::new(Self { widget, builder });
 
@@ -79,30 +80,97 @@ impl Window {
         main_view.set_visible_child_name(child_name);
     }
 
-    fn setup_destination_type_signals(builder: gtk::Builder, destination_type: libadwaita::ComboRow) {
-        destination_type.connect_property_selected_item_notify(
-            clone!(@weak destination_type => move |_| {
-                get_widget!(builder, gtk::Widget, backup_local_path);
-                backup_local_path.hide();
-
-                get_widget!(builder, gtk::Widget, backup_sftp_host);
-                backup_sftp_host.hide();
-
-                get_widget!(builder, gtk::Widget, backup_b2_bucket);
-                backup_b2_bucket.hide();
-
-                let item_name = destination_type.selected_item()
-                    .unwrap() // there must be an item
-                    .downcast::<gtk::StringObject>()
+    fn setup_signals(builder: gtk::Builder) {
+        // Destination combo box which controls which other widgets are shown
+        // or hidden.
+        get_widget!(builder, gtk::ComboBox, backup_destination_type);
+        let cbuilder = builder.clone();
+        backup_destination_type.connect_changed(
+            clone!(@weak backup_destination_type => move |_| {
+                let backup_destination_type = backup_destination_type.downcast::<gtk::ComboBoxText>().unwrap();
+                let item_name = backup_destination_type.active_text()
                     .unwrap() // there must be a valid string
-                    .string()
                     .to_string();
 
-                match RepositoryKind::from(item_name.as_str()) {
-                    RepositoryKind::Local => backup_local_path.show(),
-                    RepositoryKind::SFTP => backup_sftp_host.show(),
-                    RepositoryKind::B2 => backup_b2_bucket.show(),
-                }
+                let name_prefix_to_show = match RepositoryKind::from(item_name.as_str()) {
+                    RepositoryKind::Local => "backup_local",
+                    RepositoryKind::SFTP => "backup_sftp",
+                    RepositoryKind::B2 => "backup_b2_bucket",
+                };
+
+                let conditional_widget_names = vec![
+                    "backup_local_path",
+                    "backup_local_path_button",
+                    "backup_sftp_host",
+                    "backup_sftp_host_entry",
+                    "backup_b2_bucket",
+                    "backup_b2_bucket_entry"
+                ];
+
+                for name in conditional_widget_names {
+                    let w = cbuilder.object::<gtk::Widget>(name)
+                        .expect(format!("Could not find {}", name).as_str());
+
+                    if name.starts_with(name_prefix_to_show) {
+                        w.show();
+                    } else {
+                        w.hide();
+                    }
+                };
+            })
+        );
+
+        // Button to select a folder in case backup_local is used. Uses
+        // FileChooserNative for better cross-platform integration.
+        get_widget!(builder, gtk::Entry, hidden_backup_local_path);
+        let mut default_path = glib::home_dir().unwrap();
+        default_path.push("Backups");
+        hidden_backup_local_path.set_text(
+            &default_path.to_string_lossy()
+        );
+
+        get_widget!(builder, gtk::Button, backup_local_path_button);
+        backup_local_path_button.connect_clicked(
+            clone!(@weak backup_local_path_button => move |_| {
+                get_widget!(builder, gtk::Window, window);
+
+                let chooser = gtk::FileChooserNative::new(
+                    Some("Choose backup folder"),
+                    Some(&window),
+                    gtk::FileChooserAction::SelectFolder,
+                    None,
+                    None
+                );
+                chooser.show();
+
+                let main_loop = glib::MainLoop::new(None, true);
+
+                let cmain_loop = main_loop.clone();
+                chooser.connect_response(
+                    clone!(@weak builder, @weak chooser => move |_, response_type| {
+                        cmain_loop.quit();
+
+                        if response_type != gtk::ResponseType::Accept {
+                            return;
+                        }
+
+                        let gfile = chooser.file().unwrap();
+                        let info = gfile.query_info(
+                            &gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
+                            gio::FileQueryInfoFlags::NONE,
+                            gio::NONE_CANCELLABLE
+                        ).unwrap();
+
+                        get_widget!(builder, gtk::Label, backup_local_path_label);
+                        backup_local_path_label.set_label(&info.display_name());
+
+                        get_widget!(builder, gtk::Entry, hidden_backup_local_path);
+                        hidden_backup_local_path.set_text(
+                            &gfile.path().unwrap().to_string_lossy()
+                        );
+                    })
+                );
+                main_loop.run();
             })
         );
     }
@@ -126,8 +194,6 @@ impl Window {
             "create" => {
                 win_add.hide();
                 win_go_previous.show();
-
-                self.create_backup();
             },
             _ => {
                 unimplemented!();
@@ -135,16 +201,40 @@ impl Window {
         }
     }
 
-    fn create_backup(&self) {
-        // Simple test
-        let backup = Backup {
-            name: "uva".to_string(),
-            repository: Repository {
-                kind: RepositoryKind::B2,
-                identifier: "fedora-vm-uva".to_string(),
-                path: "/system".to_string(),
+    pub fn create_backup(&self) {
+        get_widget!(self.builder, gtk::Entry, backup_name_entry);
+        let name = backup_name_entry.text().to_string();
+
+        get_widget!(self.builder, gtk::ComboBoxText, backup_destination_type);
+        let type_name = backup_destination_type.active_text()
+            .unwrap() // there must be a valid string
+            .to_string();
+        let kind = RepositoryKind::from(type_name.as_str());
+
+        let identifier = "".to_string();
+
+        let path = match kind {
+            RepositoryKind::Local => {
+                get_widget!(self.builder, gtk::Entry, hidden_backup_local_path);
+                hidden_backup_local_path.text().to_string()
             },
-            password: "pass".to_string()
+            _ => unimplemented!(),
+        };
+
+        // FIXME: error handling.
+        std::fs::create_dir_all(&path).unwrap();
+
+        get_widget!(self.builder, gtk::Entry, backup_password_entry);
+        let password = backup_password_entry.text().to_string();
+
+        let backup = Backup {
+            name,
+            repository: Repository {
+                kind,
+                identifier,
+                path,
+            },
+            password,
         };
 
         let client = reqwest::blocking::Client::new();

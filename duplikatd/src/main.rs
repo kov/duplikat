@@ -1,6 +1,8 @@
 use vial;
 
 mod backups;
+mod restic;
+
 use backups as backups_routes;
 
 mod index {
