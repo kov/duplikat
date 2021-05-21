@@ -5,7 +5,7 @@ use std::io::prelude::*;
 pub struct Configuration {}
 
 impl Configuration {
-    pub fn new(backup: &Backup) -> std::io::Result<()> {
+    pub fn create(backup: &Backup) -> std::io::Result<()> {
         let mut base_path = Self::base_config_path();
         base_path.push("duplikatd");
         base_path.push("backups");
@@ -13,7 +13,7 @@ impl Configuration {
 
         std::fs::create_dir_all(&*base_path.to_string_lossy())?;
 
-        let mut config_path = base_path.clone();
+        let mut config_path = base_path;
         config_path.push("config.json");
 
         let mut config = File::create(&*config_path.to_string_lossy())?;
@@ -30,9 +30,7 @@ impl Configuration {
                 base_path
             },
             _ => {
-                std::path::PathBuf::from(
-                    dirs::config_dir().unwrap()
-                )
+                dirs::config_dir().unwrap()
             }
         }
     }

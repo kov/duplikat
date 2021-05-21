@@ -36,7 +36,7 @@ fn create_backup(req: Request) -> impl Responder {
     let backup = req.json::<Backup>().unwrap();
     println!("{:#?}", backup);
 
-    let configuration = Configuration::new(&backup);
+    let configuration = Configuration::create(&backup);
     println!("{:#?}", configuration);
 
     Response::from(200)

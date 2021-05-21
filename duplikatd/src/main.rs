@@ -1,5 +1,3 @@
-use vial;
-
 mod backups;
 mod restic;
 
