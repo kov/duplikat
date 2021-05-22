@@ -4,8 +4,8 @@
   <requires lib="gtk+" version="4.0"/>
   <object class="GtkApplicationWindow" id="window">
     <property name="can-focus">True</property>
-    <property name="default-width">600</property>
-    <property name="default-height">300</property>
+    <property name="default-width">400</property>
+    <property name="default-height">600</property>
     <child>
       <object class="GtkStack" id="main_view">
         <property name="visible">True</property>
@@ -134,7 +134,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkLabel" id="backup_local_path_label">
-                                    <property name="label" translatable="yes">Backups</property>
+                                    <property name="label" translatable="yes">$HOME/Backups</property>
                                     <property name="visible">True</property>
                                     <property name="halign">start</property>
                                   </object>
@@ -144,15 +144,6 @@
                             <layout>
                               <property name="row">2</property>
                               <property name="column">1</property>
-                            </layout>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkEntry" id="hidden_backup_local_path">
-                            <property name="visible">False</property>
-                            <layout>
-                              <property name="row">2</property>
-                              <property name="column">0</property>
                             </layout>
                           </object>
                         </child>
@@ -233,6 +224,21 @@
                             <layout>
                               <property name="row">3</property>
                               <property name="column">1</property>
+                            </layout>
+                          </object>
+                        </child>
+                        <!-- Folders to include -->
+                        <child>
+                          <object class="GtkLabel">
+                            <property name="label" translatable="yes">Folders to include</property>
+                            <property name="visible">True</property>
+                            <property name="halign">start</property>
+                            <attributes>
+                              <attribute name="weight" value="bold"/>
+                            </attributes>
+                            <layout>
+                              <property name="row">5</property>
+                              <property name="column">0</property>
                             </layout>
                           </object>
                         </child>

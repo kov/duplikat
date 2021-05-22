@@ -122,10 +122,10 @@ impl Window {
 
         // Button to select a folder in case backup_local is used. Uses
         // FileChooserNative for better cross-platform integration.
-        get_widget!(builder, gtk::Entry, hidden_backup_local_path);
+        get_widget!(builder, gtk::Label, backup_local_path_label);
         let mut default_path = glib::home_dir().unwrap();
         default_path.push("Backups");
-        hidden_backup_local_path.set_text(
+        backup_local_path_label.set_label(
             &default_path.to_string_lossy()
         );
 
@@ -155,17 +155,8 @@ impl Window {
                         }
 
                         let gfile = chooser.file().unwrap();
-                        let info = gfile.query_info(
-                            &gio::FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
-                            gio::FileQueryInfoFlags::NONE,
-                            gio::NONE_CANCELLABLE
-                        ).unwrap();
-
                         get_widget!(builder, gtk::Label, backup_local_path_label);
-                        backup_local_path_label.set_label(&info.display_name());
-
-                        get_widget!(builder, gtk::Entry, hidden_backup_local_path);
-                        hidden_backup_local_path.set_text(
+                        backup_local_path_label.set_label(
                             &gfile.path().unwrap().to_string_lossy()
                         );
                     })
