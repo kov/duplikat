@@ -3,6 +3,9 @@ name = "duplikat"
 version = "0.1.0"
 edition = "2018"
 
+[build-dependencies]
+cc = "1.0"
+
 [dependencies.gio]
 git = "https://github.com/gtk-rs/gtk-rs/"
 
