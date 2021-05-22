@@ -1,4 +1,4 @@
-use isahc::prelude::*;
+use isahc::{AsyncReadResponseExt, Request, RequestExt};
 use duplikat_types::*;
 use glib::{Cast, clone};
 use gtk::prelude::{
@@ -16,7 +16,7 @@ async fn get_backups_list(list_box: gtk::ListBox) {
         .await;
     match &mut res {
         Ok(res) => {
-            let backups = res.json::<Vec<Backup>>().unwrap();
+            let backups = res.json::<Vec<Backup>>().await.unwrap();
             println!("{:#?}", res);
             println!("{:#?}", backups);
             for b in backups {

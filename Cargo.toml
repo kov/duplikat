@@ -39,7 +39,7 @@ version = "1.0"
 version = "1.0"
 
 [dependencies.isahc]
-version = "0.9"
+version = "1.4"
 features = ["json"]
 
 [dependencies.reqwest]
