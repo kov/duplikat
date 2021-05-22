@@ -20,7 +20,7 @@ git = "https://gitlab.gnome.org/bilelmoussaoui/libadwaita-rs"
 version = "0.3.0"
 
 [dependencies.gettext-rs]
-version = "0.4.4"
+version = "0.7"
 features = ["gettext-system"]
 
 [dependencies.duplikat-types]
