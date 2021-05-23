@@ -16,10 +16,6 @@ fn main() {
     bindtextdomain("duplikat", config::LOCALEDIR);
     textdomain("duplikat");
 
-    let res = gio::Resource::load(config::PKGDATADIR.to_owned() + "/duplikat.gresource")
-        .expect("Could not load resources");
-    gio::resources_register(&res);
-
     libadwaita::init();
 
     let app = gtk::Application::new(Some("br.dev.kov.Duplikat"), Default::default());
