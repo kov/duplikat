@@ -1,0 +1,13 @@
+[package]
+name = "duplikatd"
+version = "0.1.0"
+authors = ["Gustavo Noronha Silva <gustavo@noronha.dev.br>"]
+edition = "2018"
+
+[dependencies]
+dirs = "3.0"
+duplikat-types = { path = "../duplikat-types" }
+serde = "1.0"
+serde_json = "1.0"
+users = "0.11"
+vial = { version = "0.1.8", features = ["json_serde"] }

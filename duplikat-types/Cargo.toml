@@ -1,0 +1,11 @@
+[package]
+name = "duplikat-types"
+version = "0.1.0"
+authors = ["Gustavo Noronha Silva <gustavo@noronha.dev.br>"]
+edition = "2018"
+
+[dependencies]
+strum = "0.21"
+strum_macros = "0.21"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
