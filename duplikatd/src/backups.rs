@@ -1,7 +1,7 @@
 use duplikat_types::*;
 use std::fs::File;
 use std::io::{Result, prelude::*};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use vial::prelude::*;
 struct Configuration {}
 
@@ -14,18 +14,47 @@ impl Configuration {
 
         std::fs::create_dir_all(&*base_path.to_string_lossy())?;
 
-        let repository = "lala";
-        Self::write_str_to_file(&base_path, repository)?;
+        let repository_string = backup.repository.to_string();
+        Self::write_str_to_file(&base_path, "repo", &repository_string)?;
+        Self::write_str_to_file(&base_path, "password", &backup.password)?;
+        Self::write_include_file(&base_path, &backup.include)?;
+        Self::write_exclude_file(&base_path, &backup.exclude)?;
 
         Ok(())
     }
 
-    fn write_str_to_file(base_path: &Path, data: &str) -> Result<()> {
+    fn write_str_to_file(base_path: &Path, filename: &str, data: &str) -> Result<()> {
         let mut file_path = base_path.to_path_buf();
-        file_path.push("repo");
+        file_path.push(filename);
 
         let mut file = File::create(&*file_path.to_string_lossy())?;
         file.write_all(data.as_bytes())?;
+
+        Ok(())
+    }
+
+    fn write_include_file(base_path: &Path, include: &[PathBuf]) -> Result<()> {
+        let mut file_path = base_path.to_path_buf();
+        file_path.push("include");
+
+        let mut file = File::create(&*file_path.to_string_lossy())?;
+        for path in include {
+            file.write_all(path.to_string_lossy().as_bytes())?;
+            file.write_all("\n".as_bytes())?;
+        }
+
+        Ok(())
+    }
+
+    fn write_exclude_file(base_path: &Path, exclude: &[String]) -> Result<()> {
+        let mut file_path = base_path.to_path_buf();
+        file_path.push("exclude");
+
+        let mut file = File::create(&*file_path.to_string_lossy())?;
+        for pattern in exclude {
+            file.write_all(pattern.as_bytes())?;
+            file.write_all("\n".as_bytes())?;
+        }
 
         Ok(())
     }
