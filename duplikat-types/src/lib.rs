@@ -2,6 +2,11 @@ use std::{path::PathBuf, str::FromStr};
 use serde::{Serialize, Deserialize};
 use strum_macros::{EnumIter, EnumString, ToString};
 
+mod client;
+mod server;
+pub use crate::client::*;
+pub use crate::server::*;
+
 #[derive(Serialize, Deserialize, Debug, PartialEq, EnumIter, EnumString, ToString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "snake_case")]

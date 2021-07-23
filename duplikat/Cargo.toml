@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 duplikat-types = { path = "../duplikat-types" }
 gtk = { version = "0.2", package = "gtk4" }
-glib = { version = "0.14.2" }
-reqwest = { version = "0.11", features = ["blocking", "json"] }
+glib = { version = "0.14" }
+gio = { version = "0.14" }
 serde_json = "1.0"
 strum = "0.21"
