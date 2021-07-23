@@ -3,7 +3,9 @@ use std::fs::File;
 use std::io::{Result, prelude::*};
 use std::path::{Path, PathBuf};
 use vial::prelude::*;
-struct Configuration {}
+use crate::restic::Restic;
+
+pub struct Configuration {}
 
 impl Configuration {
     pub fn create(backup: &Backup) -> Result<()> {
@@ -71,6 +73,23 @@ impl Configuration {
             }
         }
     }
+
+    fn config_file(name: &str, filename: &str) -> std::path::PathBuf {
+        let mut path = Self::base_config_path();
+        path.push("duplikatd");
+        path.push("backups");
+        path.push(name);
+        path.push(filename);
+        path
+    }
+
+    pub fn repo_file(name: &str) -> std::path::PathBuf {
+        Self::config_file(name, "repo")
+    }
+
+    pub fn password_file(name: &str) -> std::path::PathBuf {
+        Self::config_file(name, "password")
+    }
 }
 
 routes! {
@@ -114,6 +133,11 @@ fn create_backup(req: Request) -> impl Responder {
     let configuration = Configuration::create(&backup);
     println!("{:#?}", configuration);
 
-    Response::from(200)
-        .with_json(backup)
+    if let Ok(()) = Restic::create_repo(&backup.name) {
+        Response::from(200)
+            .with_json(backup)
+    } else {
+        Response::from(500)
+    }
+
 }

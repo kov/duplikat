@@ -1,6 +1,8 @@
 mod backups;
+mod restic;
 
 use backups as backups_routes;
+use restic as restic_routes;
 
 mod index {
     vial::routes! {
@@ -8,7 +10,10 @@ mod index {
     }
 }
 
-
 fn main() {
-    vial::run!(index, backups_routes).unwrap()
+    vial::run!(
+        index,
+        backups_routes,
+        restic_routes
+    ).unwrap()
 }

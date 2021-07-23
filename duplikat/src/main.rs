@@ -23,6 +23,19 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     let window = gtk::ApplicationWindow::new(app);
     window.set_title(Some("Duplikat"));
 
+    // Headerbar
+    let headerbar = gtk::HeaderBar::new();
+    window.set_titlebar(Some(&headerbar));
+
+    let run_button = gtk::Button::with_label("Run");
+    run_button.connect_clicked(move |_| {
+        let client = reqwest::blocking::Client::new();
+        let res = client.post("http://localhost:7667/run")
+            .send().unwrap();
+        println!("{:#?}", res);
+        println!("{}", res.text().unwrap());
+    });
+
     // Create/edit backup
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
 
