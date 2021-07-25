@@ -1,4 +1,5 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
 use vial::prelude::*;
 use crate::backups::Configuration;
 
@@ -24,5 +25,24 @@ routes! {
 }
 
 fn run_backup(_req: Request) -> impl Responder {
+    let name = "kov";
+    let child = Command::new("restic")
+        .args(&[
+            "--json",
+            "backup",
+            "--files-from", &Configuration::include_file(name).to_string_lossy(),
+            "--exclude-file", &Configuration::exclude_file(name).to_string_lossy(),
+            "--repository-file", &Configuration::repo_file(name).to_string_lossy(),
+            "--password-file", &Configuration::password_file(name).to_string_lossy(),
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to run restic");
+
+    let output = child.stdout.expect("Failed to open stdout");
+    let output = BufReader::new(output);
+    for line in output.lines() {
+        println!("{}", line.unwrap());
+    }
     Response::from(200)
 }

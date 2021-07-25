@@ -90,6 +90,14 @@ impl Configuration {
     pub fn password_file(name: &str) -> std::path::PathBuf {
         Self::config_file(name, "password")
     }
+
+    pub fn include_file(name: &str) -> std::path::PathBuf {
+        Self::config_file(name, "include")
+    }
+
+    pub fn exclude_file(name: &str) -> std::path::PathBuf {
+        Self::config_file(name, "exclude")
+    }
 }
 
 routes! {
