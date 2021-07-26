@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use std::path::PathBuf;
-use glib::clone;
+use glib::{MainContext, clone, source::Priority};
+use gio::{SocketClient, DataInputStream, IOStream};
 use gtk::prelude::*;
 use gtk::ApplicationWindow;
 use duplikat_types::*;
@@ -28,12 +29,28 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     window.set_titlebar(Some(&headerbar));
 
     let run_button = gtk::Button::with_label("Run");
+    headerbar.pack_start(&run_button);
+
     run_button.connect_clicked(move |_| {
-        let client = reqwest::blocking::Client::new();
-        let res = client.post("http://localhost:7667/run")
-            .send().unwrap();
-        println!("{:#?}", res);
-        println!("{}", res.text().unwrap());
+        MainContext::default().spawn_local(async move {
+            let socket = SocketClient::new();
+            if let Ok(socket) = socket.connect_to_host_async_future("127.0.0.1:7667", 7667).await {
+                let stream = socket.upcast::<IOStream>();
+
+                let writer = stream.output_stream();
+                writer.write_all_async_future("RUN\n", Priority::default()).await.unwrap();
+
+                let reader = DataInputStream::new(&stream.input_stream());
+                while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
+                    if let Some(line) = line {
+                        println!("{:#?}", line);
+                    } else {
+                        break;
+                    }
+                }
+                println!("connected!");
+            }
+        });
     });
 
     // Create/edit backup
