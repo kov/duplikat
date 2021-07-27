@@ -1,10 +1,10 @@
 mod backups;
 mod restic;
 
-use tokio::io::{AsyncBufReadExt, BufReader, BufWriter};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::{TcpListener, tcp::WriteHalf};
 use backups as backups_routes;
-use restic as restic_routes;
+use restic::run_backup;
 
 mod index {
     vial::routes! {
@@ -12,8 +12,9 @@ mod index {
     }
 }
 
-async fn process_request<W>(buffer: &str, writer: &mut BufWriter<W>) {
+async fn process_request<'a>(buffer: &str, writer: &mut WriteHalf<'a>) {
     println!("{:#?}", buffer);
+    run_backup("kov", writer).await;
 }
 
 #[tokio::main]
@@ -24,13 +25,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (mut socket, _) = listener.accept().await?;
 
         tokio::spawn(async move {
-            let (reader, writer) = socket.split();
+            let (reader, mut writer) = socket.split();
 
             let mut reader = BufReader::new(reader);
-            let mut writer = BufWriter::new(writer);
 
             let mut buffer = String::new();
             while let Ok(count) = reader.read_line(&mut buffer).await {
+                if count == 0 {
+                    break;
+                }
                 println!("{}: {:#?}", count, buffer);
                 process_request(&buffer, &mut writer).await;
                 buffer.clear();
@@ -40,8 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     vial::run!(
         index,
-        backups_routes,
-        restic_routes
+        backups_routes
     ).unwrap();
 
     Ok(())

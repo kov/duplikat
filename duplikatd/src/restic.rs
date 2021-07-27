@@ -1,5 +1,7 @@
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
+use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::net::tcp::WriteHalf;
 use vial::prelude::*;
 use crate::backups::Configuration;
 
@@ -20,12 +22,7 @@ impl Restic {
     }
 }
 
-routes! {
-    POST "/run" => run_backup;
-}
-
-fn run_backup(_req: Request) -> impl Responder {
-    let name = "kov";
+pub async fn run_backup<'a>(name: &str, writer: &mut WriteHalf<'a>) {
     let child = Command::new("restic")
         .args(&[
             "--json",
@@ -42,7 +39,9 @@ fn run_backup(_req: Request) -> impl Responder {
     let output = child.stdout.expect("Failed to open stdout");
     let output = BufReader::new(output);
     for line in output.lines() {
-        println!("{}", line.unwrap());
+        let mut line = line.unwrap();
+        println!("{}", line);
+        line.push('\n');
+        writer.write_all(line.as_bytes()).await;
     }
-    Response::from(200)
 }

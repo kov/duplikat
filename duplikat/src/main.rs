@@ -31,27 +31,39 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     let run_button = gtk::Button::with_label("Run");
     headerbar.pack_start(&run_button);
 
-    run_button.connect_clicked(move |_| {
-        MainContext::default().spawn_local(async move {
-            let socket = SocketClient::new();
-            if let Ok(socket) = socket.connect_to_host_async_future("127.0.0.1:7667", 7667).await {
-                let stream = socket.upcast::<IOStream>();
+    let progress_bar = gtk::ProgressBar::new();
+    headerbar.pack_end(&progress_bar);
 
-                let writer = stream.output_stream();
-                writer.write_all_async_future("RUN\n", Priority::default()).await.unwrap();
+    run_button.connect_clicked(
+        clone!(@weak progress_bar => move |_| {
+            MainContext::default().spawn_local(async move {
+                let socket = SocketClient::new();
+                if let Ok(socket) = socket.connect_to_host_async_future("127.0.0.1:7667", 7667).await {
+                    let stream = socket.upcast::<IOStream>();
 
-                let reader = DataInputStream::new(&stream.input_stream());
-                while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
-                    if let Some(line) = line {
-                        println!("{:#?}", line);
-                    } else {
-                        break;
+                    let writer = stream.output_stream();
+                    writer.write_all_async_future("RUN\n", Priority::default()).await.unwrap();
+
+                    let reader = DataInputStream::new(&stream.input_stream());
+                    while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
+                        if let Some(line) = line {
+                            let message = serde_json::from_str(&line.to_string()).unwrap();
+                            match message {
+                                ResticMessage::Status(status) => {
+                                    progress_bar.set_fraction(status.percent_done);
+                                },
+                                ResticMessage::Summary(_) => {
+                                    progress_bar.set_fraction(1.);
+                                }
+                            }
+                        } else {
+                            break;
+                        }
                     }
                 }
-                println!("connected!");
-            }
-        });
-    });
+            });
+        })
+    );
 
     // Create/edit backup
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);

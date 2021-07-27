@@ -4,9 +4,11 @@ use serde::{Serialize, Deserialize};
 pub struct ResticMessageStatus {
     pub percent_done: f64,
     pub total_files: u64,
-    pub files_done: u64,
+    pub files_done: Option<u64>,
     pub total_bytes: u64,
-    pub bytes_done: u64,
+    pub bytes_done: Option<u64>,
+    pub seconds_elapsed: Option<u64>,
+    pub seconds_remaining: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -27,7 +29,7 @@ pub struct ResticMessageSummary{
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "message_type")]
+#[serde(tag = "message_type", rename_all = "lowercase")]
 pub enum ResticMessage {
     Status(ResticMessageStatus),
     Summary(ResticMessageSummary),
@@ -51,14 +53,18 @@ mod tests {
        let status_message = ResticMessage::Status(ResticMessageStatus {
            percent_done: 0.07672352397538289,
            total_files: 5,
-           files_done: 2,
+           files_done: Some(2),
            total_bytes: 2349097,
-           bytes_done: 180231
+           bytes_done: Some(180231),
+           seconds_elapsed: None,
+           seconds_remaining: None,
        });
-       let deserialized_message: ResticMessageStatus = serde_json::from_value(status_message_value).unwrap();
+       let deserialized_message: ResticMessage = serde_json::from_value(status_message_value).unwrap();
        if let ResticMessage::Status(status_message) = status_message {
-           assert_eq!(status_message.total_files, deserialized_message.total_files);
-           assert_eq!(status_message.total_bytes, deserialized_message.total_bytes);
+           if let ResticMessage::Status(deserialized_message) = deserialized_message {
+                assert_eq!(status_message.total_files, deserialized_message.total_files);
+                assert_eq!(status_message.total_bytes, deserialized_message.total_bytes);
+            }
        }
     }
 }
