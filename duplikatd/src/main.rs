@@ -1,20 +1,18 @@
-mod backups;
-mod restic;
-
+use duplikat_types::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::{TcpListener, tcp::WriteHalf};
-use backups as backups_routes;
-use restic::run_backup;
+use restic::Restic;
 
-mod index {
-    vial::routes! {
-        GET "/" => |_| "<h1>This is the index.</h1>";
-    }
-}
+mod restic;
 
+#[allow(clippy::needless_lifetimes)]
 async fn process_request<'a>(buffer: &str, writer: &mut WriteHalf<'a>) {
-    println!("{:#?}", buffer);
-    run_backup("kov", writer).await;
+    if let Ok(result) = serde_json::from_str(buffer) {
+        match result {
+            ClientMessage::CreateBackup(create) => Restic::create_backup(&create.backup).await,
+            ClientMessage::RunBackup(backup) => Restic::run_backup(&backup.name, writer).await,
+        }
+    }
 }
 
 #[tokio::main]
@@ -23,7 +21,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         let (mut socket, _) = listener.accept().await?;
-
         tokio::spawn(async move {
             let (reader, mut writer) = socket.split();
 
@@ -34,17 +31,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if count == 0 {
                     break;
                 }
-                println!("{}: {:#?}", count, buffer);
-                process_request(&buffer, &mut writer).await;
+                process_request(buffer.trim_end(), &mut writer).await;
                 buffer.clear();
             };
         });
     }
 
-    vial::run!(
-        index,
-        backups_routes
-    ).unwrap();
-
+    #[allow(unreachable_code)]
     Ok(())
 }

@@ -1,11 +1,13 @@
+mod server;
+
 use std::str::FromStr;
 use std::path::PathBuf;
 use glib::{MainContext, clone, source::Priority};
-use gio::{SocketClient, DataInputStream, IOStream};
 use gtk::prelude::*;
 use gtk::ApplicationWindow;
 use duplikat_types::*;
 use strum::IntoEnumIterator;
+use crate::server::Server;
 
 fn main() {
     gtk::init().unwrap_or_else(|_| panic!("Failed to initialize GTK."));
@@ -28,47 +30,16 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     let headerbar = gtk::HeaderBar::new();
     window.set_titlebar(Some(&headerbar));
 
-    let run_button = gtk::Button::with_label("Run");
-    headerbar.pack_start(&run_button);
+    let stack_switcher = gtk::StackSwitcher::new();
+    headerbar.pack_start(&stack_switcher);
 
-    let progress_bar = gtk::ProgressBar::new();
-    headerbar.pack_end(&progress_bar);
-
-    run_button.connect_clicked(
-        clone!(@weak progress_bar => move |_| {
-            MainContext::default().spawn_local(async move {
-                let socket = SocketClient::new();
-                if let Ok(socket) = socket.connect_to_host_async_future("127.0.0.1:7667", 7667).await {
-                    let stream = socket.upcast::<IOStream>();
-
-                    let writer = stream.output_stream();
-                    writer.write_all_async_future("RUN\n", Priority::default()).await.unwrap();
-
-                    let reader = DataInputStream::new(&stream.input_stream());
-                    while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
-                        if let Some(line) = line {
-                            let message = serde_json::from_str(&line.to_string()).unwrap();
-                            match message {
-                                ResticMessage::Status(status) => {
-                                    progress_bar.set_fraction(status.percent_done);
-                                },
-                                ResticMessage::Summary(_) => {
-                                    progress_bar.set_fraction(1.);
-                                }
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            });
-        })
-    );
+    let stack = gtk::Stack::new();
+    window.set_child(Some(&stack));
+    stack_switcher.set_stack(Some(&stack));
 
     // Create/edit backup
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-
-    window.set_child(Some(&hbox));
+    stack.add_titled(&hbox, Some("create/edit"), "Create or edit");
 
     let grid = gtk::Grid::new();
 
@@ -79,6 +50,7 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     grid.attach(&label, 0, 0, 1, 1);
 
     let name_entry = gtk::Entry::new();
+    name_entry.set_text("kov");
     name_entry.set_placeholder_text(Some("System backup"));
 
     grid.attach_next_to(&name_entry, Some(&label), gtk::PositionType::Right, 1, 1);
@@ -137,7 +109,7 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     grid.attach(&label, 0, 2, 1, 1);
 
     let path = gtk::Entry::new();
-    path.set_text("/");
+    path.set_text("/tmp/duplikat-dev");
 
     grid.attach_next_to(&path, Some(&label), gtk::PositionType::Right, 1, 1);
 
@@ -146,6 +118,7 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     grid.attach(&label, 0, 3, 1, 1);
 
     let password = gtk::PasswordEntry::new();
+    password.set_text("lala");
     password.set_show_peek_icon(true);
 
     grid.attach_next_to(&password, Some(&label), gtk::PositionType::Right, 1, 1);
@@ -155,6 +128,7 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     grid.attach(&label, 0, 4, 1, 1);
 
     let confirm = gtk::PasswordEntry::new();
+    confirm.set_text("lala");
     confirm.set_show_peek_icon(true);
 
     grid.attach_next_to(&confirm, Some(&label), gtk::PositionType::Right, 1, 1);
@@ -175,33 +149,88 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
         })
     );
 
-    add_backup.connect_clicked(move |_| {
-        let repo_type = type_combo.active_id()
-            .expect("Combo box should never be empty")
-            .to_string();
-        let identifier = identifier.text().to_string();
-        let path = path.text().to_string();
-        let password = password.text().to_string();
+    add_backup.connect_clicked(
+        clone!(@weak name_entry => move |_| {
+            let repo_type = type_combo.active_id()
+                .expect("Combo box should never be empty")
+                .to_string();
+            let identifier = identifier.text().to_string();
+            let path = path.text().to_string();
+            let password = password.text().to_string();
 
-        let repository_str = format!("{}:{}:{}", repo_type, identifier, path);
+            let repository_str = format!("{}:{}:{}", repo_type, identifier, path);
 
-        let backup = Backup {
-            name: name_entry.text().to_string(),
-            repository: Repository::from(repository_str.as_str()),
-            password,
-            include: vec![PathBuf::from("/home/kov/Downloads")],
-            exclude: vec![".cache".to_string()],
-        };
+            let backup = Backup {
+                name: name_entry.text().to_string(),
+                repository: Repository::from(repository_str.as_str()),
+                password,
+                include: vec![PathBuf::from("/home/kov/Downloads"), PathBuf::from("/home/kov/Projects/gbuild")],
+                exclude: vec![".cache".to_string()],
+            };
 
-        let client = reqwest::blocking::Client::new();
-        let res = client.post("http://localhost:7667/backups")
-            .body(serde_json::to_string(&backup).unwrap())
-            .send().unwrap();
-        println!("{:#?}", res);
-        println!("{}", res.text().unwrap());
-    });
+            MainContext::default().spawn_local(async move {
+                if let Err(error) = Server::send_message(
+                    ClientMessage::CreateBackup(ClientMessageCreateBackup {backup})
+                ).await { println!("Error creating backup: {:#?}", error) }
+            });
+         })
+    );
 
     grid.attach(&add_backup, 1, 5, 1, 1);
+
+    // List backups view
+    let listbox = gtk::ListBox::new();
+    stack.add_titled(&listbox, Some("list/run"), "List & run");
+
+    let row = gtk::ListBoxRow::new();
+    row.set_selectable(false);
+    listbox.append(&row);
+
+    let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    row.set_child(Some(&hbox));
+
+    let run_button = gtk::Button::with_label("Run");
+    hbox.append(&run_button);
+
+    let progress_bar = gtk::ProgressBar::new();
+    progress_bar.set_valign(gtk::Align::Center);
+    progress_bar.set_halign(gtk::Align::Fill);
+    hbox.append(&progress_bar);
+
+    run_button.connect_clicked(
+        clone!(@weak name_entry, @weak progress_bar => move |_| {
+            MainContext::default().spawn_local(async move {
+                let run_backup_message = ClientMessage::RunBackup(
+                    ClientMessageRunBackup {
+                        name: name_entry.text().to_string()
+                    }
+                );
+
+                let (_stream, _writer, reader) = match Server::send_message(run_backup_message).await {
+                    Ok((s, w, r)) => (s, w, r),
+                    Err(err) => {
+                        println!("Failed to run...: {:#?}", err);
+                        return;
+                    }
+                };
+                while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
+                    if let Some(line) = line {
+                        let message = serde_json::from_str(&line.to_string()).unwrap();
+                        match message {
+                            ResticMessage::Status(status) => {
+                                progress_bar.set_fraction(status.percent_done);
+                            },
+                            ResticMessage::Summary(_) => {
+                                progress_bar.set_fraction(1.);
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            });
+        })
+    );
 
     window
 }
