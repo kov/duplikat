@@ -15,5 +15,6 @@ pub struct ClientMessageRunBackup {
 #[serde(tag = "message_type")]
 pub enum ClientMessage {
     CreateBackup(ClientMessageCreateBackup),
+    ListBackups,
     RunBackup(ClientMessageRunBackup),
 }

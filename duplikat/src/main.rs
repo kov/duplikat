@@ -1,13 +1,31 @@
-mod server;
+#![feature(async_closure)]
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::path::PathBuf;
-use glib::{MainContext, clone, source::Priority};
+use glib::{MainContext, clone};
 use gtk::prelude::*;
 use gtk::ApplicationWindow;
 use duplikat_types::*;
 use strum::IntoEnumIterator;
 use crate::server::Server;
+
+mod server;
+
+thread_local!(
+    static WINDOW: RefCell<Option<Rc<gtk::ApplicationWindow>>> = RefCell::new(None);
+);
+
+pub fn get_main_window() -> gtk::ApplicationWindow {
+    let mut window: Option<gtk::ApplicationWindow> = None;
+    WINDOW.with(|w| {
+        if let Some(w) = w.borrow().as_ref() {
+            window.replace((**w).clone());
+        }
+    });
+    window.expect("Main window not initialized!")
+}
 
 fn main() {
     gtk::init().unwrap_or_else(|_| panic!("Failed to initialize GTK."));
@@ -16,10 +34,44 @@ fn main() {
     app.connect_activate(move |app| {
         let window = create_ui(app);
         window.present();
+        WINDOW.with(|w| *w.borrow_mut() = Some(Rc::new(window)));
     });
 
     let ret = app.run();
     std::process::exit(ret);
+}
+
+fn create_backups_list_ui() -> gtk::ListBox {
+    let listbox = gtk::ListBox::new();
+    listbox.set_css_classes(&["rich-list"]);
+
+    MainContext::default().spawn_local(
+        async {
+            let connection = match Server::connect().await {
+                Ok(c) => c,
+                Err(_) => return,
+            };
+
+            if let Err(error) = connection.send_message(ClientMessage::ListBackups).await {
+                println!("Error listing backups: {:#?}", error);
+            };
+
+            while let Ok(message) = connection.read_message().await {
+                if let Some(message) = message {
+                    match message {
+                        ResticMessage::BackupsList(list) => {
+                            dbg!(list);
+                        },
+                        _ => unimplemented!(),
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    );
+
+    listbox
 }
 
 fn create_ui(app: &gtk::Application) -> ApplicationWindow {
@@ -36,6 +88,10 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     let stack = gtk::Stack::new();
     window.set_child(Some(&stack));
     stack_switcher.set_stack(Some(&stack));
+
+    // Backups list
+    let backups_listbox = create_backups_list_ui();
+    stack.add_titled(&backups_listbox, Some("backups"), "Backups list");
 
     // Create/edit backup
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
@@ -169,7 +225,12 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
             };
 
             MainContext::default().spawn_local(async move {
-                if let Err(error) = Server::send_message(
+                let connection = match Server::connect().await {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+
+                if let Err(error) = connection.send_message(
                     ClientMessage::CreateBackup(ClientMessageCreateBackup {backup})
                 ).await { println!("Error creating backup: {:#?}", error) }
             });
@@ -206,23 +267,26 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
                     }
                 );
 
-                let (_stream, _writer, reader) = match Server::send_message(run_backup_message).await {
-                    Ok((s, w, r)) => (s, w, r),
-                    Err(err) => {
-                        println!("Failed to run...: {:#?}", err);
-                        return;
-                    }
+                let connection = match Server::connect().await {
+                    Ok(c) => c,
+                    Err(_) => return,
                 };
-                while let Ok(line) = reader.read_line_utf8_async_future(Priority::default()).await {
-                    if let Some(line) = line {
-                        let message = serde_json::from_str(&line.to_string()).unwrap();
+
+                if let Err(error) = connection.send_message(run_backup_message).await {
+                    println!("Failed to run...: {:#?}", error);
+                    return;
+                };
+
+                while let Ok(message) = connection.read_message().await {
+                    if let Some(message) = message {
                         match message {
                             ResticMessage::Status(status) => {
                                 progress_bar.set_fraction(status.percent_done);
                             },
                             ResticMessage::Summary(_) => {
                                 progress_bar.set_fraction(1.);
-                            }
+                            },
+                            _ => unimplemented!(),
                         }
                     } else {
                         break;

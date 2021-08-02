@@ -1,7 +1,7 @@
 use duplikat_types::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::{TcpListener, tcp::WriteHalf};
-use restic::Restic;
+use restic::{Configuration, Restic};
 
 mod restic;
 
@@ -11,6 +11,7 @@ async fn process_request<'a>(buffer: &str, writer: &mut WriteHalf<'a>) {
         match result {
             ClientMessage::CreateBackup(create) => Restic::create_backup(&create.backup).await,
             ClientMessage::RunBackup(backup) => Restic::run_backup(&backup.name, writer).await,
+            ClientMessage::ListBackups => Configuration::list(writer).await,
         }
     }
 }

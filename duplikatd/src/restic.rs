@@ -75,6 +75,37 @@ impl Configuration {
         Ok(())
     }
 
+    #[allow(clippy::needless_lifetimes)]
+    pub async fn list<'a>(writer: &mut WriteHalf<'a>) {
+        let base_path = Self::base_config_path();
+        dbg!("list");
+        let mut entries = tokio::fs::read_dir(base_path).await.unwrap();
+
+        let mut backups = vec![];
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            dbg!(&entry);
+            backups.push(
+                entry.file_name()
+                    .to_string_lossy()
+                    .to_string()
+            );
+        }
+
+        let message = ResticMessage::BackupsList(
+            ResticMessageBackupsList {
+                list: backups,
+            }
+        );
+
+        writer.write_all(
+            serde_json::to_string(&message)
+                .unwrap()
+                .as_bytes()
+        ).await.unwrap();
+
+        writer.write_all("\n".as_bytes()).await.unwrap();
+    }
+
     fn write_str_to_file(base_path: &Path, filename: &str, data: &str) -> Result<()> {
         let mut file_path = base_path.to_path_buf();
         file_path.push(filename);
