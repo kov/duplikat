@@ -165,7 +165,7 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     grid.attach(&label, 0, 2, 1, 1);
 
     let path = gtk::Entry::new();
-    path.set_text("/tmp/duplikat-dev");
+    path.set_text("/home/kov/.config/duplikatd/storage");
 
     grid.attach_next_to(&path, Some(&label), gtk::PositionType::Right, 1, 1);
 
