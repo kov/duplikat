@@ -28,11 +28,16 @@ pub struct ResticMessageSummary {
     pub snapshot_id: String,
 }
 
-// This should include other stats, maybe? Or should we split
-// them so they can be filled as we go.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResticMessageBackupsList {
     pub list: Vec<String>
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ResticMessageBackupStats {
+    pub name: String,
+    pub total_size: u64,
+    pub total_file_count: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -41,6 +46,7 @@ pub enum ResticMessage {
     Status(ResticMessageStatus),
     Summary(ResticMessageSummary),
     BackupsList(ResticMessageBackupsList),
+    BackupStats(ResticMessageBackupStats),
 }
 
 #[cfg(test)]

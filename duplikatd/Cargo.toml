@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 dirs = "3.0"
 duplikat-types = { path = "../duplikat-types" }
+futures = "0.3"
 serde = "1.0"
 serde_json = "1.0"
 tokio = { version = "1.8", features = ["full"] }

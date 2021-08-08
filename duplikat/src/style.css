@@ -1,0 +1,7 @@
+#overview_listbox {
+    margin: 30px;
+}
+
+#overview_listbox row {
+    background-color: rgba(0, 0, 0, 0);
+}

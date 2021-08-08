@@ -4,8 +4,12 @@ version = "0.1.0"
 authors = ["Gustavo Noronha Silva <gustavo@noronha.dev.br>"]
 edition = "2018"
 
+[build-dependencies]
+gbuild = "0.1"
+
 [dependencies]
 duplikat-types = { path = "../duplikat-types" }
+gdk = { version = "0.2", package = "gdk4" }
 gtk = { version = "0.2", package = "gtk4" }
 glib = { version = "0.14" }
 gio = { version = "0.14" }

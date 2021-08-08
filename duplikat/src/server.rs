@@ -29,9 +29,8 @@ impl Connection {
         self.istream.read_line_utf8_async_future(Priority::default()).await
             .map(|line| {
                 if let Some(line) = line {
-                    let message = serde_json::from_str(&line.to_string())
-                        .unwrap_or_else(|_| panic!("Received broken message: {:#?}", line));
-                    message
+                    serde_json::from_str(&line.to_string())
+                        .unwrap_or_else(|_| panic!("Received broken message: {:#?}", line))
                 } else {
                     None
                 }

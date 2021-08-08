@@ -150,3 +150,17 @@ mod tests {
         );
      }
 }
+
+pub fn add_message_type(json_string: &str, type_string: &str) -> String {
+    add_key(json_string, "message_type", type_string.to_string())
+}
+
+pub fn add_key(json_string: &str, key: &str, value: String) -> String {
+    let mut object_value: serde_json::Value = serde_json::from_str(json_string).unwrap();
+    let object = object_value.as_object_mut().unwrap();
+    object.insert(
+        key.to_string(),
+        serde_json::Value::String(value)
+    );
+    object_value.to_string()
+}

@@ -1,5 +1,3 @@
-#![feature(async_closure)]
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -12,6 +10,7 @@ use strum::IntoEnumIterator;
 use crate::server::Server;
 
 mod server;
+mod overview;
 
 thread_local!(
     static WINDOW: RefCell<Option<Rc<gtk::ApplicationWindow>>> = RefCell::new(None);
@@ -30,6 +29,14 @@ pub fn get_main_window() -> gtk::ApplicationWindow {
 fn main() {
     gtk::init().unwrap_or_else(|_| panic!("Failed to initialize GTK."));
 
+    let css_provider = gtk::CssProvider::new();
+    css_provider.load_from_resource("/br/dev/kov/Duplikat/style.css");
+    gtk::StyleContext::add_provider_for_display(
+	&gdk::Display::default().unwrap(),
+	&css_provider,
+	800
+    );
+
     let app = gtk::Application::new(Some("br.dev.kov.Duplikat"), Default::default());
     app.connect_activate(move |app| {
         let window = create_ui(app);
@@ -39,39 +46,6 @@ fn main() {
 
     let ret = app.run();
     std::process::exit(ret);
-}
-
-fn create_backups_list_ui() -> gtk::ListBox {
-    let listbox = gtk::ListBox::new();
-    listbox.set_css_classes(&["rich-list"]);
-
-    MainContext::default().spawn_local(
-        async {
-            let connection = match Server::connect().await {
-                Ok(c) => c,
-                Err(_) => return,
-            };
-
-            if let Err(error) = connection.send_message(ClientMessage::ListBackups).await {
-                println!("Error listing backups: {:#?}", error);
-            };
-
-            while let Ok(message) = connection.read_message().await {
-                if let Some(message) = message {
-                    match message {
-                        ResticMessage::BackupsList(list) => {
-                            dbg!(list);
-                        },
-                        _ => unimplemented!(),
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-    );
-
-    listbox
 }
 
 fn create_ui(app: &gtk::Application) -> ApplicationWindow {
@@ -90,8 +64,8 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     stack_switcher.set_stack(Some(&stack));
 
     // Backups list
-    let backups_listbox = create_backups_list_ui();
-    stack.add_titled(&backups_listbox, Some("backups"), "Backups list");
+    let overview = overview::OverviewUI::new();
+    stack.add_titled(&overview.borrow().container, Some("backups"), "Backups list");
 
     // Create/edit backup
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
@@ -238,63 +212,6 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     );
 
     grid.attach(&add_backup, 1, 5, 1, 1);
-
-    // List backups view
-    let listbox = gtk::ListBox::new();
-    stack.add_titled(&listbox, Some("list/run"), "List & run");
-
-    let row = gtk::ListBoxRow::new();
-    row.set_selectable(false);
-    listbox.append(&row);
-
-    let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-    row.set_child(Some(&hbox));
-
-    let run_button = gtk::Button::with_label("Run");
-    hbox.append(&run_button);
-
-    let progress_bar = gtk::ProgressBar::new();
-    progress_bar.set_valign(gtk::Align::Center);
-    progress_bar.set_halign(gtk::Align::Fill);
-    hbox.append(&progress_bar);
-
-    run_button.connect_clicked(
-        clone!(@weak name_entry, @weak progress_bar => move |_| {
-            MainContext::default().spawn_local(async move {
-                let run_backup_message = ClientMessage::RunBackup(
-                    ClientMessageRunBackup {
-                        name: name_entry.text().to_string()
-                    }
-                );
-
-                let connection = match Server::connect().await {
-                    Ok(c) => c,
-                    Err(_) => return,
-                };
-
-                if let Err(error) = connection.send_message(run_backup_message).await {
-                    println!("Failed to run...: {:#?}", error);
-                    return;
-                };
-
-                while let Ok(message) = connection.read_message().await {
-                    if let Some(message) = message {
-                        match message {
-                            ResticMessage::Status(status) => {
-                                progress_bar.set_fraction(status.percent_done);
-                            },
-                            ResticMessage::Summary(_) => {
-                                progress_bar.set_fraction(1.);
-                            },
-                            _ => unimplemented!(),
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            });
-        })
-    );
 
     window
 }
