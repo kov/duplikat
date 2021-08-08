@@ -3,9 +3,9 @@ use serde::{Serialize, Deserialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResticMessageStatus {
     pub percent_done: f64,
-    pub total_files: u64,
+    pub total_files: Option<u64>,
     pub files_done: Option<u64>,
-    pub total_bytes: u64,
+    pub total_bytes: Option<u64>,
     pub bytes_done: Option<u64>,
     pub seconds_elapsed: Option<u64>,
     pub seconds_remaining: Option<u64>,
@@ -60,9 +60,9 @@ mod tests {
        });
        let status_message = ResticMessage::Status(ResticMessageStatus {
            percent_done: 0.07672352397538289,
-           total_files: 5,
+           total_files: Some(5),
            files_done: Some(2),
-           total_bytes: 2349097,
+           total_bytes: Some(2349097),
            bytes_done: Some(180231),
            seconds_elapsed: None,
            seconds_remaining: None,
