@@ -81,6 +81,8 @@ impl From<&str> for Repository {
 pub struct Backup {
     pub name: String,
     pub repository: Repository,
+    pub key_id: Option<String>,
+    pub key_secret: Option<String>,
     pub password: String,
     pub include: Vec<PathBuf>,
     pub exclude: Vec<String>,
@@ -99,6 +101,8 @@ mod tests {
                 identifier: "server-test".to_string(),
                 path: "/system".to_string(),
             },
+            key_id: Some("key-id".to_string()),
+            key_secret: Some("very-secret".to_string()),
             password: "pass".to_string(),
             include: vec![],
             exclude: vec![],
@@ -106,7 +110,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_string(&backup).unwrap(),
-            "{\"name\":\"test\",\"repository\":{\"kind\":\"b2\",\"identifier\":\"server-test\",\"path\":\"/system\"},\"password\":\"pass\",\"include\":[],\"exclude\":[]}"
+            "{\"name\":\"test\",\"repository\":{\"kind\":\"b2\",\"identifier\":\"server-test\",\"path\":\"/system\"},\"key_id\":\"key-id\",\"key_secret\":\"very-secret\",\"password\":\"pass\",\"include\":[],\"exclude\":[]}".to_string()
         )
     }
 

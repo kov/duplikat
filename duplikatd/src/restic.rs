@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufRead, BufReader, Result};
 use std::path::{Path, PathBuf};
@@ -22,6 +23,8 @@ impl Restic {
     }
 
     pub(crate) async fn create_repo(name: &str) -> Result<()> {
+        let environment = Configuration::environment_for_name(name).await;
+        dbg!(&environment);
         Command::new("restic")
             .args(&[
                 "--json",
@@ -29,12 +32,14 @@ impl Restic {
                 "--repository-file", &Configuration::repo_file(name).to_string_lossy(),
                 "--password-file", &Configuration::password_file(name).to_string_lossy(),
             ])
+            .envs(environment)
             .output()
             .map(|_| ()) // FIXME: proper error handling will require looking into Output
     }
 
     #[allow(clippy::needless_lifetimes)]
     pub async fn run_backup<'a>(name: &str, writer: &mut WriteHalf<'a>) {
+        let environment = Configuration::environment_for_name(name).await;
         let child = Command::new("restic")
             .args(&[
                 "--json",
@@ -44,6 +49,7 @@ impl Restic {
                 "--repository-file", &Configuration::repo_file(name).to_string_lossy(),
                 "--password-file", &Configuration::password_file(name).to_string_lossy(),
             ])
+            .envs(environment)
             .stdout(Stdio::piped())
             .spawn()
             .expect("Failed to run restic");
@@ -58,6 +64,7 @@ impl Restic {
     }
 
     pub(crate) async fn stats_for(name: String) -> Result<(String, String)> {
+        let environment = Configuration::environment_for_name(&name).await;
         let child = Command::new("restic")
             .args(&[
                 "--json",
@@ -65,6 +72,7 @@ impl Restic {
                 "--repository-file", &Configuration::repo_file(&name).to_string_lossy(),
                 "--password-file", &Configuration::password_file(&name).to_string_lossy(),
             ])
+            .envs(environment)
             .stdout(Stdio::piped())
             .spawn()
             .expect("Failed to run restic");
@@ -116,6 +124,8 @@ impl Configuration {
             name: name.to_string(),
             repository,
             password,
+            key_id: None,
+            key_secret: None,
             include,
             exclude,
         })
@@ -136,8 +146,8 @@ impl Configuration {
         );
         let mut contents = String::new();
         let mut vector = vec![];
-        while repo_file.read_to_string(&mut contents)? != 0 {
-            vector.push(T::from(contents.clone()));
+        while repo_file.read_line(&mut contents)? != 0 {
+            vector.push(T::from(contents.trim().to_string()));
             contents.clear();
         }
         Ok(vector)
@@ -155,7 +165,39 @@ impl Configuration {
         Self::write_include_file(&base_path, &backup.include)?;
         Self::write_exclude_file(&base_path, &backup.exclude)?;
 
+        match backup.repository.kind {
+            RepositoryKind::B2 => {
+                Self::write_str_to_file(
+                    &base_path, "environment",
+                    &format!(
+                        "B2_ACCOUNT_ID={}\nB2_ACCOUNT_KEY={}\n",
+                        backup.key_id.as_ref().unwrap(),
+                        backup.key_secret.as_ref().unwrap(),
+                    )
+                )?;
+            },
+            _ => ()
+        }
+
         Ok(())
+    }
+
+    pub(crate) async fn environment_for_name(name: &str) -> HashMap<String, String> {
+        let mut environment = HashMap::<String, String>::new();
+
+        let variables = match Self::read_file_to_vec::<String>(
+            Self::environment_file(name).as_path()
+        ) {
+            Ok(v) => v,
+            Err(_) => return environment, // FIXME: check if error is expected (not found) or not
+        };
+
+        for variable in variables {
+            let (key, value) = variable.split_once("=").unwrap();
+            environment.insert(key.to_string(), value.to_string());
+        }
+
+        environment
     }
 
     #[allow(clippy::needless_lifetimes)]
@@ -278,6 +320,10 @@ impl Configuration {
 
     pub fn exclude_file(name: &str) -> std::path::PathBuf {
         Self::config_file(name, "exclude")
+    }
+
+    pub fn environment_file(name: &str) -> std::path::PathBuf {
+        Self::config_file(name, "environment")
     }
 }
 
