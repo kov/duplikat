@@ -30,7 +30,6 @@ impl CreateEditUI {
         grid.attach(&label, next_row_num(&mut row_num), 0, 1, 1);
 
         let name_entry = gtk::Entry::new();
-        name_entry.set_text("kov");
         name_entry.set_placeholder_text(Some("System backup"));
 
         grid.attach_next_to(&name_entry, Some(&label), gtk::PositionType::Right, 1, 1);
@@ -129,7 +128,6 @@ impl CreateEditUI {
         grid.attach(&label, 0, next_row_num(&mut row_num), 1, 1);
 
         let path = gtk::Entry::new();
-        path.set_text("/home/kov/.config/duplikatd/storage");
 
         grid.attach_next_to(&path, Some(&label), gtk::PositionType::Right, 1, 1);
 
@@ -138,7 +136,6 @@ impl CreateEditUI {
         grid.attach(&label, 0, next_row_num(&mut row_num), 1, 1);
 
         let password = gtk::PasswordEntry::new();
-        password.set_text("lala");
         password.set_show_peek_icon(true);
 
         grid.attach_next_to(&password, Some(&label), gtk::PositionType::Right, 1, 1);
@@ -148,7 +145,6 @@ impl CreateEditUI {
         grid.attach(&label, 0, next_row_num(&mut row_num), 1, 1);
 
         let confirm = gtk::PasswordEntry::new();
-        confirm.set_text("lala");
         confirm.set_show_peek_icon(true);
 
         grid.attach_next_to(&confirm, Some(&label), gtk::PositionType::Right, 1, 1);
