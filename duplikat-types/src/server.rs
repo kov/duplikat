@@ -1,3 +1,4 @@
+use crate::ServerError;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,6 +48,11 @@ pub enum ResticMessage {
     Summary(ResticMessageSummary),
     BackupsList(ResticMessageBackupsList),
     BackupStats(ResticMessageBackupStats),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ServerResponse {
+    pub error: Option<ServerError>,
 }
 
 #[cfg(test)]

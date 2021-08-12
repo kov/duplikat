@@ -9,6 +9,11 @@ use crate::server::Server;
 
 pub struct CreateEditUI {
     pub container: gtk::Box,
+    name: gtk::Editable,
+    path: gtk::Editable,
+    password: gtk::Editable,
+    confirm: gtk::Editable,
+    add_backup: gtk::Button,
 }
 
 fn next_row_num(num: &mut i32) -> i32 {
@@ -150,23 +155,12 @@ impl CreateEditUI {
         grid.attach_next_to(&confirm, Some(&label), gtk::PositionType::Right, 1, 1);
 
         let add_backup = gtk::Button::with_label("Add Backup");
-        add_backup.set_sensitive(true);
-
-        // Disable or enable add_backup based on password
-        confirm.connect_changed(
-            clone!(@weak add_backup, @weak password, @weak confirm => move |_| {
-                let password = password.text().to_string();
-                let confirm = confirm.text().to_string();
-                if password != confirm {
-                    add_backup.set_sensitive(false);
-                } else {
-                    add_backup.set_sensitive(true);
-                }
-            })
-        );
+        add_backup.set_sensitive(false);
 
         add_backup.connect_clicked(
-            clone!(@weak name_entry, @weak key_entry, @weak secret_entry => move |_| {
+            clone!(@weak name_entry, @weak path,
+                @weak key_entry, @weak secret_entry,
+                @weak password => move |_| {
                 let repo_type = type_combo.active_id()
                     .expect("Combo box should never be empty")
                     .to_string();
@@ -208,16 +202,85 @@ impl CreateEditUI {
                     if let Err(error) = connection.send_message(
                         ClientMessage::CreateBackup(ClientMessageCreateBackup {backup})
                     ).await { println!("Error creating backup: {:#?}", error) }
+
+                    match connection.read_response().await {
+                        Ok(response) => {
+                            dbg!(&response);
+                            if let Some(error) = response.error {
+                                let error = match error {
+                                    ServerError::Configuration(e) |
+                                    ServerError::RepoInit(e) => e,
+                                };
+                                let main_window = crate::get_main_window();
+                                let dialog = gtk::MessageDialogBuilder::new()
+                                    .transient_for(&main_window)
+                                    .modal(true)
+                                    .message_type(gtk::MessageType::Error)
+                                    .buttons(gtk::ButtonsType::Close)
+                                    .text("Failed to create backup.")
+                                    .secondary_text(&error)
+                                    .build();
+                                dialog.run_future().await;
+                                dialog.close();
+                            }
+                        },
+                        Err(error) => {
+                            dbg!(error);
+                        },
+                    };
                 });
             })
         );
 
         grid.attach(&add_backup, 1, next_row_num(&mut row_num), 1, 1);
 
-        Rc::new(RefCell::new(
+        let myself = Rc::new(RefCell::new(
             CreateEditUI {
                 container: hbox.clone(),
+                name: name_entry.upcast::<gtk::Editable>(),
+                path: path.upcast::<gtk::Editable>(),
+                password: password.upcast::<gtk::Editable>(),
+                confirm: confirm.upcast::<gtk::Editable>(),
+                add_backup: add_backup.clone()
             }
-        ))
+        ));
+
+        // Disable or enable add_backup based on various inputs.
+        let edit_ui = myself.borrow_mut();
+        let entries = vec![
+            &edit_ui.name,
+            &edit_ui.path,
+            &edit_ui.password,
+            &edit_ui.confirm,
+        ];
+
+        for entry in entries {
+            let edit_ui = myself.clone();
+            entry.connect_changed(move |_| {
+                edit_ui.borrow_mut().update_state();
+            });
+        }
+
+        // Explicitly drop the borrow so we can move self out.
+        drop(edit_ui);
+
+        myself
+    }
+
+    fn update_state(&mut self) {
+        // Start optimistic, see if anything makes us want to disable the button.
+        let mut add_backup_sensitive = true;
+
+        if self.name.text().to_string().trim().is_empty() {
+            add_backup_sensitive = false;
+        }
+
+        let password = self.password.text().to_string();
+        let confirm = self.confirm.text().to_string();
+        if password.is_empty() || password != confirm {
+            add_backup_sensitive = false;
+        }
+
+        self.add_backup.set_sensitive(add_backup_sensitive);
     }
 }

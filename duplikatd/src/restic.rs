@@ -1,31 +1,58 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{prelude::*, BufRead, BufReader, Result};
+use std::io::{prelude::*, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use anyhow::{Error, Result, bail};
 use duplikat_types::*;
 use futures::future::join_all;
+use serde_json::json;
 use tokio::io::{AsyncWriteExt};
 use tokio::net::tcp::WriteHalf;
 
 pub(crate) struct Restic {}
 
 impl Restic {
-    // FIXME: need to propagate error here so that we can tell the client.
-    pub(crate) async fn create_backup(backup: &Backup) {
+    #[allow(clippy::needless_lifetimes)]
+    pub(crate) async fn create_backup<'a>(backup: &Backup, writer: &mut WriteHalf<'a>) {
         if let Err(error) = Configuration::create(&backup) {
-            println!("Failed to create backup! {:#?}", error);
-        };
+            send_json(
+                &json!({
+                    "error": Some(ServerError::Configuration(
+                        error.to_string())
+                    )
+                }),
+                writer
+            ).await;
+            return;
+        }
 
         if let Err(error) = Restic::create_repo(&backup.name).await {
-            println!("Failed to create backup! {:#?}", error);
+            dbg!(&error);
+            send_json(
+                &json!({
+                    "error": Some(ServerError::RepoInit(
+                        error.to_string().trim().to_string())
+                    )
+                }),
+                writer
+            ).await;
+            Configuration::remove(&backup.name).await;
+            return;
         }
+
+        send_json(
+            &json!({
+                "message": "OK"
+            }),
+            writer
+        ).await;
     }
 
     pub(crate) async fn create_repo(name: &str) -> Result<()> {
         let environment = Configuration::environment_for_name(name).await;
         dbg!(&environment);
-        Command::new("restic")
+        let child = Command::new("restic")
             .args(&[
                 "--json",
                 "init",
@@ -33,8 +60,19 @@ impl Restic {
                 "--password-file", &Configuration::password_file(name).to_string_lossy(),
             ])
             .envs(environment)
-            .output()
-            .map(|_| ()) // FIXME: proper error handling will require looking into Output
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to run restic");
+
+        let mut stderr = child.stderr.expect("Failed to open stderr");
+        let mut output = String::new();
+        stderr.read_to_string(&mut output).unwrap();
+        if !output.is_empty() {
+            dbg!(&output);
+            bail!(output)
+        }
+        dbg!("OK?");
+        Ok(())
     }
 
     #[allow(clippy::needless_lifetimes)]
@@ -83,7 +121,8 @@ impl Restic {
         // Stats only return a single line that looks like this:
         // {"total_size":2349097,"total_file_count":8}
         output.lines()
-            .collect::<Result<Vec<String>>>()
+            .collect::<std::io::Result<Vec<String>>>()
+            .map_err(Error::new)
             .map(|mut lines| {
                 assert_eq!(lines.len(), 1);
                 (name, lines.pop().unwrap())
@@ -180,6 +219,13 @@ impl Configuration {
         }
 
         Ok(())
+    }
+
+    pub(crate) async fn remove(name: &str) {
+        let mut path = Self::base_config_path();
+        path.push(name);
+
+        tokio::fs::remove_dir_all(path.as_path()).await.unwrap();
     }
 
     pub(crate) async fn environment_for_name(name: &str) -> HashMap<String, String> {
@@ -333,6 +379,14 @@ async fn send_message<'a>(message: &ResticMessage, writer: &mut WriteHalf<'a>) {
         serde_json::to_string(&message)
             .unwrap()
             .as_bytes()
+    ).await.unwrap();
+
+    writer.write_all("\n".as_bytes()).await.unwrap();
+}
+
+#[allow(clippy::needless_lifetimes)]
+async fn send_json<'a>(json: &serde_json::Value, writer: &mut WriteHalf<'a>) {
+    writer.write_all(json.to_string().as_bytes()
     ).await.unwrap();
 
     writer.write_all("\n".as_bytes()).await.unwrap();

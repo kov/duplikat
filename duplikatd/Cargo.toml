@@ -5,6 +5,7 @@ authors = ["Gustavo Noronha Silva <gustavo@noronha.dev.br>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0"
 dirs = "3.0"
 duplikat-types = { path = "../duplikat-types" }
 futures = "0.3"

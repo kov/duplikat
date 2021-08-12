@@ -9,7 +9,7 @@ mod restic;
 async fn process_request<'a>(buffer: &str, writer: &mut WriteHalf<'a>) {
     if let Ok(result) = serde_json::from_str(buffer) {
         match result {
-            ClientMessage::CreateBackup(create) => Restic::create_backup(&create.backup).await,
+            ClientMessage::CreateBackup(create) => Restic::create_backup(&create.backup, writer).await,
             ClientMessage::RunBackup(backup) => Restic::run_backup(&backup.name, writer).await,
             ClientMessage::ListBackups => Configuration::list(writer).await,
         }

@@ -3,8 +3,10 @@ use serde::{Serialize, Deserialize};
 use strum_macros::{EnumIter, EnumString, ToString};
 
 mod client;
+mod error;
 mod server;
 pub use crate::client::*;
+pub use crate::error::*;
 pub use crate::server::*;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, EnumIter, EnumString, ToString)]

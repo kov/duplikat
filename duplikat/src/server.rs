@@ -36,6 +36,11 @@ impl Connection {
                 }
             })
     }
+
+    pub(crate) async fn read_response(&self) -> Result<ServerResponse, GError> {
+        let line = self.istream.read_line_utf8_async_future(Priority::default()).await?;
+        Ok(serde_json::from_str(line.unwrap().to_string().as_str()).unwrap())
+    }
 }
 
 pub(crate) struct Server {}
