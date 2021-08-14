@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use glib::clone;
 use gtk::prelude::*;
 use gtk::ApplicationWindow;
 
@@ -51,16 +52,39 @@ fn create_ui(app: &gtk::Application) -> ApplicationWindow {
     let headerbar = gtk::HeaderBar::new();
     window.set_titlebar(Some(&headerbar));
 
-    let stack_switcher = gtk::StackSwitcher::new();
-    headerbar.pack_start(&stack_switcher);
+    let create_button = gtk::ButtonBuilder::new()
+        .icon_name("list-add-symbolic")
+        .build();
+    headerbar.pack_start(&create_button);
+
+    let back_button = gtk::ButtonBuilder::new()
+        .icon_name("go-previous-symbolic")
+        .build();
+    back_button.set_visible(false);
+    headerbar.pack_start(&back_button);
 
     let stack = gtk::Stack::new();
     window.set_child(Some(&stack));
-    stack_switcher.set_stack(Some(&stack));
+
+    create_button.connect_clicked(
+        clone!(@weak stack, @weak create_button, @weak back_button => move |_| {
+            create_button.set_visible(false);
+            back_button.set_visible(true);
+            stack.set_visible_child_name("create/edit");
+        })
+    );
+
+    back_button.connect_clicked(
+        clone!(@weak stack, @weak create_button, @weak back_button => move |_| {
+            create_button.set_visible(true);
+            back_button.set_visible(false);
+            stack.set_visible_child_name("overview");
+        })
+    );
 
     // Backups list
     let overview = overview::OverviewUI::new();
-    stack.add_titled(&overview.borrow().container, Some("backups"), "Backups list");
+    stack.add_titled(&overview.borrow().container, Some("overview"), "Backups Overview");
 
     // Create/edit backup
     let create_edit = edit::CreateEditUI::new();

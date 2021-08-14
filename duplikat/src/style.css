@@ -5,3 +5,7 @@
 #overview_listbox row {
     background-color: rgba(0, 0, 0, 0);
 }
+
+#add_backup_button {
+    margin: 16px;
+}
