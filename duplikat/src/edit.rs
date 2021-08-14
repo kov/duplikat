@@ -9,10 +9,12 @@ use crate::server::Server;
 
 pub struct CreateEditUI {
     pub container: gtk::Box,
+    myself: Option<Rc<RefCell<Self>>>,
     name: gtk::Editable,
     path: gtk::Editable,
     password: gtk::Editable,
     confirm: gtk::Editable,
+    include: Vec<gtk::Editable>,
     add_backup: gtk::Button,
 }
 
@@ -23,7 +25,10 @@ fn next_row_num(num: &mut i32) -> i32 {
 
 impl CreateEditUI {
     pub(crate) fn new() -> Rc<RefCell<Self>> {
+        let main_vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        main_vbox.append(&hbox);
 
         let grid = gtk::Grid::new();
         hbox.append(&grid);
@@ -154,8 +159,14 @@ impl CreateEditUI {
 
         grid.attach_next_to(&confirm, Some(&label), gtk::PositionType::Right, 1, 1);
 
+
+        // Add backup button, and signal handlers.
         let add_backup = gtk::Button::with_label("Add Backup");
+        add_backup.set_widget_name("add_backup_button");
+        add_backup.set_halign(gtk::Align::End);
+        add_backup.set_css_classes(&["suggested-action"]);
         add_backup.set_sensitive(false);
+        main_vbox.append(&add_backup);
 
         add_backup.connect_clicked(
             clone!(@weak name_entry, @weak path,
@@ -232,21 +243,65 @@ impl CreateEditUI {
             })
         );
 
-        grid.attach(&add_backup, 1, next_row_num(&mut row_num), 1, 1);
-
         let myself = Rc::new(RefCell::new(
             CreateEditUI {
-                container: hbox.clone(),
+                container: main_vbox.clone(),
+                myself: None,
                 name: name_entry.upcast::<gtk::Editable>(),
                 path: path.upcast::<gtk::Editable>(),
                 password: password.upcast::<gtk::Editable>(),
                 confirm: confirm.upcast::<gtk::Editable>(),
+                include: vec![],
                 add_backup: add_backup.clone()
             }
         ));
 
+        // This is a weird way of giving a way for method to make new clones
+        // of the Rc.
+        myself.borrow_mut().myself.replace(myself.clone());
+
+        // Include / exclude lists.
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        hbox.append(&vbox);
+
+        let include_top = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        vbox.append(&include_top);
+
+        let label = gtk::Label::new(None);
+        label.set_halign(gtk::Align::Start);
+        label.set_markup("<b>Paths to backup</b>");
+        include_top.append(&label);
+
+        let add_include_button = gtk::Button::new();
+        add_include_button.set_halign(gtk::Align::End);
+        add_include_button.set_hexpand(true);
+        add_include_button.set_icon_name("list-add-symbolic");
+        include_top.append(&add_include_button);
+
+        let include_list = gtk::ListBox::new();
+        include_list.set_widget_name("edit_include_list");
+        include_list.set_selection_mode(gtk::SelectionMode::None);
+        include_list.set_show_separators(true);
+        include_list.set_css_classes(&["rich-list"]);
+        vbox.append(&include_list);
+
+        // Create a local mutable borrow of self so we can properly
+        // add default entries to include/exclude and connect signals.
+        let mut edit_ui = myself.borrow_mut();
+
+        let default_row = edit_ui.new_include_row(dirs::home_dir().unwrap());
+        include_list.append(&default_row);
+
+        let include_self = myself.clone();
+        add_include_button.connect_clicked(
+            clone!(@weak include_list => move |_| {
+                let row  = include_self.borrow_mut()
+                    .new_include_row(None);
+                include_list.append(&row);
+            })
+        );
+
         // Disable or enable add_backup based on various inputs.
-        let edit_ui = myself.borrow_mut();
         let entries = vec![
             &edit_ui.name,
             &edit_ui.path,
@@ -265,6 +320,55 @@ impl CreateEditUI {
         drop(edit_ui);
 
         myself
+    }
+
+    fn new_include_row(&mut self, prefill: impl Into<Option<PathBuf>>) -> gtk::ListBoxRow {
+        let row = gtk::ListBoxRowBuilder::new()
+            .activatable(false)
+            .selectable(false)
+            .build();
+
+        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        row.set_child(Some(&hbox));
+
+        let entry = gtk::Entry::new();
+        entry.set_halign(gtk::Align::Fill);
+        hbox.append(&entry);
+
+        if let Some(prefill) = prefill.into() {
+            entry.set_text(
+                prefill.to_string_lossy().to_string().as_str()
+            );
+        }
+
+        let button = gtk::Button::new();
+        button.set_halign(gtk::Align::End);
+        button.set_icon_name("list-remove-symbolic");
+        hbox.append(&button);
+
+        let myself = self.clone_self();
+        button.connect_clicked(
+            clone!(@weak row, @weak entry => move |_| {
+                // Remove entry from our list of include entries.
+                let entry = entry.upcast::<gtk::Editable>();
+                myself.borrow_mut()
+                    .include
+                    .retain(|x| x != &entry);
+
+                // Unparent row, which should destroy everything.
+                let parent = row.parent().unwrap()
+                    .downcast::<gtk::ListBox>().unwrap();
+                parent.remove(&row);
+            })
+        );
+
+        self.include.push(entry.upcast::<gtk::Editable>());
+
+        row
+    }
+
+    fn clone_self(&self) -> Rc<RefCell<Self>> {
+        self.myself.as_ref().unwrap().clone()
     }
 
     fn update_state(&mut self) {
