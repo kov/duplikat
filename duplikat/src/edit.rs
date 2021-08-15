@@ -5,15 +5,20 @@ use glib::{MainContext, clone};
 use gtk::prelude::*;
 use duplikat_types::*;
 use strum::IntoEnumIterator;
+use crate::{Application, StackPage};
 use crate::server::Server;
 
 pub struct CreateEditUI {
     pub container: gtk::Box,
     myself: Option<Rc<RefCell<Self>>>,
-    name: gtk::Editable,
-    path: gtk::Editable,
-    password: gtk::Editable,
-    confirm: gtk::Editable,
+    name: gtk::Entry,
+    kind: gtk::ComboBoxText,
+    identifier: gtk::Entry,
+    key_id: gtk::Entry,
+    key_secret: gtk::Entry,
+    path: gtk::Entry,
+    password: gtk::PasswordEntry,
+    confirm: gtk::PasswordEntry,
     include: Vec<gtk::Editable>,
     add_backup: gtk::Button,
 }
@@ -24,7 +29,7 @@ fn next_row_num(num: &mut i32) -> i32 {
 }
 
 impl CreateEditUI {
-    pub(crate) fn new() -> Rc<RefCell<Self>> {
+    pub(crate) fn new(application: Rc<RefCell<Application>>) -> Rc<RefCell<Self>> {
         let main_vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
 
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
@@ -168,91 +173,20 @@ impl CreateEditUI {
         add_backup.set_sensitive(false);
         main_vbox.append(&add_backup);
 
-        add_backup.connect_clicked(
-            clone!(@weak name_entry, @weak path,
-                @weak key_entry, @weak secret_entry,
-                @weak password => move |_| {
-                let repo_type = type_combo.active_id()
-                    .expect("Combo box should never be empty")
-                    .to_string();
-                let identifier = identifier.text().to_string();
-                let path = path.text().to_string();
-                let password = password.text().to_string();
-
-                let repository_str = format!("{}:{}:{}", repo_type, identifier, path);
-                let repository = Repository::from(repository_str.as_str());
-
-                let mut key_id: Option<String> = None;
-                let mut key_secret: Option<String> = None;
-                // This could be written as an if let, but we will add more cases
-                // here, so we make it a match.
-                match repository.kind {
-                    RepositoryKind::B2 => {
-                        key_id.replace(key_entry.text().to_string());
-                        key_secret.replace(secret_entry.text().to_string());
-                    }
-                    _ => ()
-                }
-
-                let backup = Backup {
-                    name: name_entry.text().to_string(),
-                    repository,
-                    password,
-                    key_id,
-                    key_secret,
-                    include: vec![PathBuf::from("/home/kov/Downloads"), PathBuf::from("/home/kov/Projects/gbuild")],
-                    exclude: vec![".cache".to_string()],
-                };
-
-                MainContext::default().spawn_local(async move {
-                    let connection = match Server::connect().await {
-                        Ok(c) => c,
-                        Err(_) => return,
-                    };
-
-                    if let Err(error) = connection.send_message(
-                        ClientMessage::CreateBackup(ClientMessageCreateBackup {backup})
-                    ).await { println!("Error creating backup: {:#?}", error) }
-
-                    match connection.read_response().await {
-                        Ok(response) => {
-                            dbg!(&response);
-                            if let Some(error) = response.error {
-                                let error = match error {
-                                    ServerError::Configuration(e) |
-                                    ServerError::RepoInit(e) => e,
-                                };
-                                let main_window = crate::get_main_window();
-                                let dialog = gtk::MessageDialogBuilder::new()
-                                    .transient_for(&main_window)
-                                    .modal(true)
-                                    .message_type(gtk::MessageType::Error)
-                                    .buttons(gtk::ButtonsType::Close)
-                                    .text("Failed to create backup.")
-                                    .secondary_text(&error)
-                                    .build();
-                                dialog.run_future().await;
-                                dialog.close();
-                            }
-                        },
-                        Err(error) => {
-                            dbg!(error);
-                        },
-                    };
-                });
-            })
-        );
-
         let myself = Rc::new(RefCell::new(
             CreateEditUI {
                 container: main_vbox.clone(),
                 myself: None,
-                name: name_entry.upcast::<gtk::Editable>(),
-                path: path.upcast::<gtk::Editable>(),
-                password: password.upcast::<gtk::Editable>(),
-                confirm: confirm.upcast::<gtk::Editable>(),
+                name: name_entry.clone(),
+                identifier: identifier.clone(),
+                kind: type_combo.clone(),
+                key_id: key_entry.clone(),
+                key_secret: secret_entry.clone(),
+                path: path.clone(),
+                password: password.clone(),
+                confirm: confirm.clone(),
                 include: vec![],
-                add_backup: add_backup.clone()
+                add_backup: add_backup.clone(),
             }
         ));
 
@@ -262,6 +196,7 @@ impl CreateEditUI {
 
         // Include / exclude lists.
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        vbox.set_widget_name("include_exclude_box");
         hbox.append(&vbox);
 
         let include_top = gtk::Box::new(gtk::Orientation::Horizontal, 16);
@@ -289,30 +224,147 @@ impl CreateEditUI {
         // add default entries to include/exclude and connect signals.
         let mut edit_ui = myself.borrow_mut();
 
-        let default_row = edit_ui.new_include_row(dirs::home_dir().unwrap());
+        let default_include_path = match users::get_effective_uid() {
+            0 => std::path::PathBuf::from("/"),
+            _ => dirs::home_dir().unwrap(),
+        };
+
+        let default_row = edit_ui.new_include_row(default_include_path);
         include_list.append(&default_row);
 
+        let include_app = application.clone();
         let include_self = myself.clone();
         add_include_button.connect_clicked(
             clone!(@weak include_list => move |_| {
-                let row  = include_self.borrow_mut()
-                    .new_include_row(None);
-                include_list.append(&row);
+                let main_window = include_app.borrow().main_window.clone();
+                let file_picker = gtk::FileChooserDialog::new(
+                    Some("Choose folder to include..."),
+                    Some(&main_window),
+                    gtk::FileChooserAction::SelectFolder,
+                    &[
+                        ("Cancel", gtk::ResponseType::Cancel),
+                        ("Accept", gtk::ResponseType::Accept),
+                    ]
+                );
+
+                let picker_self = include_self.clone();
+                file_picker.run_async(move |dialog, response| {
+                    dialog.close();
+
+                    if response == gtk::ResponseType::Accept {
+                        let path = dialog.file().unwrap().path().unwrap();
+                        let row  = picker_self.borrow_mut()
+                            .new_include_row(path);
+                        include_list.append(&row);
+                    }
+                });
+            })
+        );
+
+        let add_self = myself.clone();
+        add_backup.connect_clicked(
+            clone!(@weak name_entry, @weak type_combo, @weak identifier, @weak path,
+                @weak key_entry, @weak secret_entry,
+                @weak password => move |_| {
+                let repo_type = type_combo.active_id()
+                    .expect("Combo box should never be empty")
+                    .to_string();
+                let identifier = identifier.text().to_string();
+                let path = path.text().to_string();
+                let password = password.text().to_string();
+
+                let repository_str = format!("{}:{}:{}", repo_type, identifier, path);
+                let repository = Repository::from(repository_str.as_str());
+
+                let mut key_id: Option<String> = None;
+                let mut key_secret: Option<String> = None;
+                // This could be written as an if let, but we will add more cases
+                // here, so we make it a match.
+                match repository.kind {
+                    RepositoryKind::B2 => {
+                        key_id.replace(key_entry.text().to_string());
+                        key_secret.replace(secret_entry.text().to_string());
+                    }
+                    _ => ()
+                }
+
+                let include = add_self.borrow()
+                    .include.iter()
+                    .map(|entry| PathBuf::from(entry.text().to_string()))
+                    .collect();
+
+                let backup = Backup {
+                    name: name_entry.text().to_string(),
+                    repository,
+                    password,
+                    key_id,
+                    key_secret,
+                    include,
+                    exclude: vec![".cache".to_string()],
+                };
+
+                let myself = add_self.clone();
+                let app = application.clone();
+                MainContext::default().spawn_local(async move {
+                    let connection = match Server::connect(app.clone()).await {
+                        Ok(c) => c,
+                        Err(_) => return,
+                    };
+
+                    if let Err(error) = connection.send_message(
+                        ClientMessage::CreateBackup(ClientMessageCreateBackup {backup})
+                    ).await { println!("Error creating backup: {:#?}", error) }
+
+                    match connection.read_response().await {
+                        Ok(response) => {
+                            dbg!(&response);
+                            if let Some(error) = response.error {
+                                let error = match error {
+                                    ServerError::Configuration(e) |
+                                    ServerError::RepoInit(e) => e,
+                                };
+                                let main_window = app.borrow().main_window.clone();
+                                let dialog = gtk::MessageDialogBuilder::new()
+                                    .transient_for(&main_window)
+                                    .modal(true)
+                                    .message_type(gtk::MessageType::Error)
+                                    .buttons(gtk::ButtonsType::Close)
+                                    .text("Failed to create backup.")
+                                    .secondary_text(&error)
+                                    .build();
+                                dialog.run_future().await;
+                                dialog.close();
+                            } else {
+                                myself.borrow_mut().clear();
+                                app.borrow_mut().set_stack_page(StackPage::Overview);
+                            }
+                        },
+                        Err(error) => {
+                            dbg!(error);
+                        },
+                    };
+                });
             })
         );
 
         // Disable or enable add_backup based on various inputs.
         let entries = vec![
-            &edit_ui.name,
-            &edit_ui.path,
-            &edit_ui.password,
-            &edit_ui.confirm,
+            edit_ui.name.clone().upcast::<gtk::Editable>(),
+            edit_ui.path.clone().upcast::<gtk::Editable>(),
+            edit_ui.password.clone().upcast::<gtk::Editable>(),
+            edit_ui.confirm.clone().upcast::<gtk::Editable>(),
         ];
 
         for entry in entries {
             let edit_ui = myself.clone();
             entry.connect_changed(move |_| {
-                edit_ui.borrow_mut().update_state();
+                // If we are clearing the form after a backup was added, this handler
+                // will be triggered, but the edit ui will be borrowed mutably by the
+                // clear method. We don't need to care about state, as it will be reset.
+                match edit_ui.try_borrow_mut() {
+                    Ok(mut edit_ui) => edit_ui.update_state(),
+                    Err(_) => (),
+                }
             });
         }
 
@@ -322,7 +374,9 @@ impl CreateEditUI {
         myself
     }
 
-    fn new_include_row(&mut self, prefill: impl Into<Option<PathBuf>>) -> gtk::ListBoxRow {
+    fn new_include_row(&mut self, path: PathBuf) -> gtk::ListBoxRow {
+        let path_string = path.to_string_lossy().to_string();
+
         let row = gtk::ListBoxRowBuilder::new()
             .activatable(false)
             .selectable(false)
@@ -331,17 +385,18 @@ impl CreateEditUI {
         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
         row.set_child(Some(&hbox));
 
+        let label = gtk::Label::new(Some(&path_string));
+        label.set_halign(gtk::Align::Fill);
+        hbox.append(&label);
+
         let entry = gtk::Entry::new();
-        entry.set_halign(gtk::Align::Fill);
+        entry.set_visible(false);
         hbox.append(&entry);
 
-        if let Some(prefill) = prefill.into() {
-            entry.set_text(
-                prefill.to_string_lossy().to_string().as_str()
-            );
-        }
+        entry.set_text(&path_string);
 
         let button = gtk::Button::new();
+        button.set_hexpand(true);
         button.set_halign(gtk::Align::End);
         button.set_icon_name("list-remove-symbolic");
         hbox.append(&button);
@@ -386,5 +441,19 @@ impl CreateEditUI {
         }
 
         self.add_backup.set_sensitive(add_backup_sensitive);
+    }
+
+    fn clear(&mut self) {
+        self.name.set_text("");
+        self.kind.set_active_id(Some("Local"));
+        self.identifier.set_text("");
+        self.key_id.set_text("");
+        self.key_secret.set_text("");
+        self.path.set_text("");
+        self.password.set_text("");
+        self.confirm.set_text("");
+        self.include.iter_mut()
+            .for_each(|entry| entry.set_text(""));
+        self.add_backup.set_sensitive(false);
     }
 }

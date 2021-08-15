@@ -2,11 +2,13 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use duplikat_types::*;
 use glib::{MainContext, clone};
 use gtk::prelude::*;
+use crate::Application;
 use crate::server::Server;
 
 pub struct OverviewUI {
     pub container: gtk::ListBox,
     rows: HashMap<String, BackupRow>,
+    application: Rc<RefCell<Application>>,
 }
 
 struct BackupRow {
@@ -26,7 +28,7 @@ fn to_human_readable(bytes: u64) -> String {
 }
 
 impl OverviewUI {
-    pub(crate) fn new() -> Rc<RefCell<Self>> {
+    pub(crate) fn new(application: Rc<RefCell<Application>>) -> Rc<RefCell<Self>> {
         let listbox = gtk::ListBox::new();
         listbox.set_widget_name("overview_listbox");
         listbox.set_selection_mode(gtk::SelectionMode::None);
@@ -36,14 +38,16 @@ impl OverviewUI {
         let overview = Rc::new(RefCell::new(OverviewUI {
             container: listbox.clone(),
             rows: Default::default(),
+            application: application.clone(),
         }));
 
         let o = overview.clone();
+        let a = application.clone();
         clone!(@weak listbox => move || {
             MainContext::default().spawn_local(
                 async move {
                     let mut overview = o.borrow_mut();
-                    let connection = match Server::connect().await {
+                    let connection = match Server::connect(a).await {
                         Ok(c) => c,
                         Err(_) => return,
                     };
@@ -98,9 +102,11 @@ impl OverviewUI {
         hbox.append(&progress_bar);
 
         // Make an owned instance so that it can be moved into the closure.
+        let application = self.application.clone();
         let backup_name = name.to_string();
         run_button.connect_clicked(
             clone!(@weak progress_bar => move |_| {
+                let application = application.clone();
                 let name = backup_name.clone();
                 MainContext::default().spawn_local(async move {
                     let run_backup_message = ClientMessage::RunBackup(
@@ -109,7 +115,7 @@ impl OverviewUI {
                         }
                     );
 
-                    let connection = match Server::connect().await {
+                    let connection = match Server::connect(application).await {
                         Ok(c) => c,
                         Err(_) => return,
                     };

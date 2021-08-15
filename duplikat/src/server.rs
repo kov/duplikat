@@ -1,7 +1,9 @@
+use std::{cell::RefCell, rc::Rc};
 use duplikat_types::*;
 use glib::{prelude::*, error::Error as GError, source::Priority};
 use gio::{prelude::*, SocketClient, DataInputStream, IOStream, OutputStream};
 use gtk::prelude::*;
+use crate::Application;
 
 pub(crate) struct Connection {
     pub stream: IOStream,
@@ -46,14 +48,14 @@ impl Connection {
 pub(crate) struct Server {}
 
 impl Server {
-    pub(crate) async fn connect() -> Result<Connection, GError> {
+    pub(crate) async fn connect(application: Rc<RefCell<Application>>) -> Result<Connection, GError> {
         let socket = SocketClient::new();
         let result = socket.connect_to_host_async_future("127.0.0.1:7667", 7667).await;
 
         let socket = match result {
             Ok(s) => s,
             Err(error) => {
-                let main_window = crate::get_main_window();
+                let main_window = application.borrow().main_window.clone();
                 let dialog = gtk::MessageDialogBuilder::new()
                     .transient_for(&main_window)
                     .modal(true)

@@ -16,3 +16,4 @@ glib = { version = "0.14" }
 gio = { version = "0.14" }
 serde_json = "1.0"
 strum = "0.21"
+users = "0.11"
