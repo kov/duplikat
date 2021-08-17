@@ -9,6 +9,7 @@ anyhow = "1.0"
 dirs = "3.0"
 duplikat-types = { path = "../duplikat-types" }
 futures = "0.3"
+log = "0.4"
 serde = "1.0"
 serde_json = "1.0"
 tokio = { version = "1.8", features = ["full"] }

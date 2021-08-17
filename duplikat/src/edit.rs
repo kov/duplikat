@@ -20,6 +20,7 @@ pub struct CreateEditUI {
     password: gtk::PasswordEntry,
     confirm: gtk::PasswordEntry,
     include: Vec<gtk::Editable>,
+    exclude: Vec<gtk::Editable>,
     add_backup: gtk::Button,
 }
 
@@ -186,6 +187,7 @@ impl CreateEditUI {
                 password: password.clone(),
                 confirm: confirm.clone(),
                 include: vec![],
+                exclude: vec![],
                 add_backup: add_backup.clone(),
             }
         ));
@@ -194,7 +196,7 @@ impl CreateEditUI {
         // of the Rc.
         myself.borrow_mut().myself.replace(myself.clone());
 
-        // Include / exclude lists.
+        // Include.
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
         vbox.set_widget_name("include_exclude_box");
         hbox.append(&vbox);
@@ -220,6 +222,32 @@ impl CreateEditUI {
         include_list.set_css_classes(&["rich-list"]);
         vbox.append(&include_list);
 
+        // Exclude.
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        vbox.set_widget_name("include_exclude_box");
+        hbox.append(&vbox);
+
+        let exclude_top = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        vbox.append(&exclude_top);
+
+        let label = gtk::Label::new(None);
+        label.set_halign(gtk::Align::Start);
+        label.set_markup("<b>Patterns to exclude</b>");
+        exclude_top.append(&label);
+
+        let add_exclude_button = gtk::Button::new();
+        add_exclude_button.set_halign(gtk::Align::End);
+        add_exclude_button.set_hexpand(true);
+        add_exclude_button.set_icon_name("list-add-symbolic");
+        exclude_top.append(&add_exclude_button);
+
+        let exclude_list = gtk::ListBox::new();
+        exclude_list.set_widget_name("edit_exclude_list");
+        exclude_list.set_selection_mode(gtk::SelectionMode::None);
+        exclude_list.set_show_separators(true);
+        exclude_list.set_css_classes(&["rich-list"]);
+        vbox.append(&exclude_list);
+
         // Create a local mutable borrow of self so we can properly
         // add default entries to include/exclude and connect signals.
         let mut edit_ui = myself.borrow_mut();
@@ -231,6 +259,10 @@ impl CreateEditUI {
 
         let default_row = edit_ui.new_include_row(default_include_path);
         include_list.append(&default_row);
+
+        for row in edit_ui.default_exclude_patterns() {
+            exclude_list.append(&row);
+        }
 
         let include_app = application.clone();
         let include_self = myself.clone();
@@ -258,6 +290,15 @@ impl CreateEditUI {
                         include_list.append(&row);
                     }
                 });
+            })
+        );
+
+        let exclude_self = myself.clone();
+        add_exclude_button.connect_clicked(
+            clone!(@weak exclude_list => move |_| {
+                let row  = exclude_self.borrow_mut()
+                     .new_exclude_row("");
+                 exclude_list.append(&row);
             })
         );
 
@@ -293,6 +334,11 @@ impl CreateEditUI {
                     .map(|entry| PathBuf::from(entry.text().to_string()))
                     .collect();
 
+                let exclude = add_self.borrow()
+                    .exclude.iter()
+                    .map(|entry| entry.text().to_string())
+                    .collect();
+
                 let backup = Backup {
                     name: name_entry.text().to_string(),
                     repository,
@@ -300,7 +346,7 @@ impl CreateEditUI {
                     key_id,
                     key_secret,
                     include,
-                    exclude: vec![".cache".to_string()],
+                    exclude,
                 };
 
                 let myself = add_self.clone();
@@ -373,6 +419,84 @@ impl CreateEditUI {
 
         myself
     }
+
+    fn default_exclude_patterns(&mut self) -> Vec<gtk::ListBoxRow> {
+        let mut patterns = Vec::<String>::new();
+        if cfg!(target_os = "macos") {
+            let home_dir = dirs::home_dir()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+
+            &[
+                ".cache",
+                "Caches",
+                &format!("{}/.Trash", home_dir),
+                &format!("{}/Library", home_dir),
+           ].iter().for_each(|p| patterns.push(p.to_string()));
+
+           if users::get_effective_uid() == 0 {
+               &[
+                   "/private/var/folders",
+                   "/private/var/networkd/db",
+                   "/private/var/protected/trustd/private",
+                   "/private/var/db"
+               ].iter().for_each(|p| patterns.push(p.to_string()));
+           }
+        }
+
+        if cfg!(target_os = "linux") {
+            patterns.push(".cache".to_string());
+            if users::get_effective_uid() == 0 {
+                patterns.push("/var/lib/systemd/coredump".to_string());
+            }
+        }
+
+        patterns
+            .iter()
+            .map(|p| self.new_exclude_row(&p))
+            .collect()
+    }
+
+    fn new_exclude_row(&mut self, initial_text: &str) -> gtk::ListBoxRow {
+        let row = gtk::ListBoxRowBuilder::new()
+            .activatable(false)
+            .selectable(false)
+            .build();
+
+        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        row.set_child(Some(&hbox));
+
+        let entry = gtk::Entry::new();
+        entry.set_text(initial_text);
+        hbox.append(&entry);
+
+        let button = gtk::Button::new();
+        button.set_hexpand(true);
+        button.set_halign(gtk::Align::End);
+        button.set_icon_name("list-remove-symbolic");
+        hbox.append(&button);
+
+        let myself = self.clone_self();
+        button.connect_clicked(
+            clone!(@weak row, @weak entry => move |_| {
+                // Remove entry from our list of include entries.
+                let entry = entry.upcast::<gtk::Editable>();
+                myself.borrow_mut()
+                    .exclude
+                    .retain(|x| x != &entry);
+
+                // Unparent row, which should destroy everything.
+                let parent = row.parent().unwrap()
+                    .downcast::<gtk::ListBox>().unwrap();
+                parent.remove(&row);
+            })
+        );
+
+        self.exclude.push(entry.upcast::<gtk::Editable>());
+
+        row
+     }
 
     fn new_include_row(&mut self, path: PathBuf) -> gtk::ListBoxRow {
         let path_string = path.to_string_lossy().to_string();

@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Error, Result, bail};
 use duplikat_types::*;
 use futures::future::join_all;
+use log::error;
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::WriteHalf;
@@ -97,7 +98,9 @@ impl Restic {
         for line in output.lines() {
             let mut line = line.unwrap();
             line.push('\n');
-            writer.write_all(line.as_bytes()).await.unwrap();
+            if let Err(error) = writer.write_all(line.as_bytes()).await {
+                error!("{:#?}", error);
+            }
         }
     }
 
