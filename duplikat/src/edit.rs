@@ -252,6 +252,8 @@ impl CreateEditUI {
         // add default entries to include/exclude and connect signals.
         let mut edit_ui = myself.borrow_mut();
 
+        // FIXME: this is wrong, we need to ask the server what UID it is
+        // running with...
         let default_include_path = match users::get_effective_uid() {
             0 => std::path::PathBuf::from("/"),
             _ => dirs::home_dir().unwrap(),
@@ -428,28 +430,23 @@ impl CreateEditUI {
                 .to_string_lossy()
                 .to_string();
 
+            // FIXME: we need to ask the server if it running in privileged mode to
+            // filter which patterns to use as default.
             &[
                 ".cache",
                 "Caches",
                 &format!("{}/.Trash", home_dir),
                 &format!("{}/Library", home_dir),
-           ].iter().for_each(|p| patterns.push(p.to_string()));
-
-           if users::get_effective_uid() == 0 {
-               &[
-                   "/private/var/folders",
-                   "/private/var/networkd/db",
-                   "/private/var/protected/trustd/private",
-                   "/private/var/db"
-               ].iter().for_each(|p| patterns.push(p.to_string()));
-           }
+                "/private/var/folders",
+                "/private/var/networkd/db",
+                "/private/var/protected/trustd/private",
+                "/private/var/db"
+            ].iter().for_each(|p| patterns.push(p.to_string()));
         }
 
         if cfg!(target_os = "linux") {
             patterns.push(".cache".to_string());
-            if users::get_effective_uid() == 0 {
-                patterns.push("/var/lib/systemd/coredump".to_string());
-            }
+            patterns.push("/var/lib/systemd/coredump".to_string());
         }
 
         patterns
