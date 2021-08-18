@@ -7,7 +7,7 @@ use anyhow::{Error, Result, bail};
 use duplikat_types::*;
 use futures::future::join_all;
 use serde_json::json;
-use tokio::io::{AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::WriteHalf;
 
 pub(crate) struct Restic {}
