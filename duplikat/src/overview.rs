@@ -41,47 +41,50 @@ impl OverviewUI {
             application: application.clone(),
         }));
 
-        let o = overview.clone();
-        let a = application.clone();
-        clone!(@weak listbox => move || {
-            MainContext::default().spawn_local(
-                async move {
-                    let mut overview = o.borrow_mut();
-                    let connection = match Server::connect(a).await {
-                        Ok(c) => c,
-                        Err(_) => return,
-                    };
-
-                    if let Err(error) = connection.send_message(ClientMessage::ListBackups).await {
-                        println!("Error listing backups: {:#?}", error);
-                    };
-
-                    while let Ok(message) = connection.read_message().await {
-                        if let Some(message) = message {
-                            dbg!(&message);
-                            match message {
-                                ResticMessage::BackupsList(backups) => {
-                                    for name in backups.list {
-                                        let row = overview.create_row_for_name(&name);
-                                        listbox.append(&row);
-                                    }
-                                },
-                                ResticMessage::BackupStats(stats) => {
-                                    dbg!(&stats);
-                                    let row = overview.rows.get(&stats.name).unwrap();
-                                    row.bytes.set_text(&to_human_readable(stats.total_size));
-                                },
-                                _ => unimplemented!(),
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            );
-        })();
+        overview.borrow().update();
 
         overview
+    }
+
+    pub fn update(&self) {
+        let a = self.application.clone();
+        MainContext::default().spawn_local(
+            async move {
+                let application = a.clone();
+                let overview = application.borrow_mut().overview.as_mut().unwrap().clone();
+                let connection = match Server::connect(a.clone()).await {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+
+                if let Err(error) = connection.send_message(ClientMessage::ListBackups).await {
+                    println!("Error listing backups: {:#?}", error);
+                };
+
+                while let Ok(message) = connection.read_message().await {
+                    if let Some(message) = message {
+                        dbg!(&message);
+                        match message {
+                            ResticMessage::BackupsList(backups) => {
+                                for name in backups.list {
+                                    let row = overview.borrow_mut().create_row_for_name(&name).clone();
+                                    overview.borrow().container.append(&row);
+                                }
+                            },
+                            ResticMessage::BackupStats(stats) => {
+                                dbg!(&stats);
+                                let overview = overview.borrow_mut();
+                                let row = overview.rows.get(&stats.name).unwrap();
+                                row.bytes.set_text(&to_human_readable(stats.total_size));
+                            },
+                            _ => unimplemented!(),
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+        );
     }
 
     fn create_row_for_name(&mut self, name: &str) -> gtk::ListBoxRow {

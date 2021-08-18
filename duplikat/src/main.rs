@@ -16,6 +16,7 @@ pub struct Application {
     pub stack: gtk::Stack,
     pub create_button: gtk::Button,
     pub back_button: gtk::Button,
+    pub overview: Option<Rc<RefCell<overview::OverviewUI>>>,
 }
 
 impl Application {
@@ -27,6 +28,7 @@ impl Application {
                 stack,
                 create_button,
                 back_button,
+                overview: None,
             }
         ))
     }
@@ -37,6 +39,7 @@ impl Application {
                 self.stack.set_visible_child_name("overview");
                 self.create_button.set_visible(true);
                 self.back_button.set_visible(false);
+                self.overview.as_mut().unwrap().borrow_mut().update();
             },
             StackPage::CreateEdit => {
                 self.stack.set_visible_child_name("create/edit");
@@ -108,6 +111,7 @@ fn create_ui(app: &gtk::Application) {
 
     // Backups list
     let overview = overview::OverviewUI::new(application.clone());
+    application.borrow_mut().overview.replace(overview.clone());
     stack.add_titled(&overview.borrow().container, Some("overview"), "Backups Overview");
 
     // Create/edit backup
