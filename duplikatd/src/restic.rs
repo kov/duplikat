@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Error, Result, bail};
 use duplikat_types::*;
 use futures::future::join_all;
-use log::error;
+use log::{error,warn};
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::WriteHalf;
@@ -252,7 +252,10 @@ impl Configuration {
     #[allow(clippy::needless_lifetimes)]
     pub async fn list<'a>(writer: &mut WriteHalf<'a>) {
         let base_path = Self::base_config_path();
-        let mut entries = tokio::fs::read_dir(base_path).await.unwrap();
+        let mut entries = match tokio::fs::read_dir(base_path).await {
+            Ok(entries) => entries,
+            Err(error) => { warn!("{:#?}", error); return },
+        };
 
         let mut backups = vec![];
         while let Some(entry) = entries.next_entry().await.unwrap() {
