@@ -5,11 +5,11 @@ use glib::{MainContext, clone};
 use gtk::prelude::*;
 use duplikat_types::*;
 use strum::IntoEnumIterator;
-use crate::{Application, StackPage};
+use crate::Application;
 use crate::server::Server;
 
 pub struct CreateEditUI {
-    pub container: gtk::Box,
+    pub window: gtk::Dialog,
     myself: Option<Rc<RefCell<Self>>>,
     name: gtk::Entry,
     kind: gtk::ComboBoxText,
@@ -21,7 +21,15 @@ pub struct CreateEditUI {
     confirm: gtk::PasswordEntry,
     include: Vec<gtk::Editable>,
     exclude: Vec<gtk::Editable>,
+    stack: gtk::Stack,
+    back_button: gtk::Button,
+    forward_button: gtk::Button,
     add_backup: gtk::Button,
+}
+
+enum Go {
+    Back,
+    Forward,
 }
 
 fn next_row_num(num: &mut i32) -> i32 {
@@ -31,13 +39,19 @@ fn next_row_num(num: &mut i32) -> i32 {
 
 impl CreateEditUI {
     pub(crate) fn new(application: Rc<RefCell<Application>>) -> Rc<RefCell<Self>> {
-        let main_vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        let window = gtk::DialogBuilder::new()
+            .transient_for(&application.borrow().main_window)
+            .hide_on_close(true)
+            .use_header_bar(1)
+            .modal(true)
+            .build();
 
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        main_vbox.append(&hbox);
+        let stack = gtk::Stack::new();
+        window.set_child(Some(&stack));
 
+        // Repository details
         let grid = gtk::Grid::new();
-        hbox.append(&grid);
+        stack.add_titled(&grid, Some("repository"), "Repository");
 
         let mut row_num = -1i32;
 
@@ -165,18 +179,27 @@ impl CreateEditUI {
 
         grid.attach_next_to(&confirm, Some(&label), gtk::PositionType::Right, 1, 1);
 
+        // Add buttons, and signal handlers.
+        let headerbar = window.header_bar();
 
-        // Add backup button, and signal handlers.
+        let back_button = gtk::Button::with_label("Back");
+        back_button.set_sensitive(false);
+        headerbar.pack_start(&back_button);
+
+        let forward_button = gtk::Button::with_label("Forward");
+        forward_button.set_css_classes(&["suggested-action"]);
+        forward_button.set_sensitive(false);
+        headerbar.pack_end(&forward_button);
+
         let add_backup = gtk::Button::with_label("Add Backup");
-        add_backup.set_widget_name("add_backup_button");
-        add_backup.set_halign(gtk::Align::End);
         add_backup.set_css_classes(&["suggested-action"]);
+        add_backup.set_visible(false);
         add_backup.set_sensitive(false);
-        main_vbox.append(&add_backup);
+        headerbar.pack_end(&add_backup);
 
         let myself = Rc::new(RefCell::new(
             CreateEditUI {
-                container: main_vbox.clone(),
+                window: window.clone(),
                 myself: None,
                 name: name_entry.clone(),
                 identifier: identifier.clone(),
@@ -188,6 +211,9 @@ impl CreateEditUI {
                 confirm: confirm.clone(),
                 include: vec![],
                 exclude: vec![],
+                stack: stack.clone(),
+                back_button: back_button.clone(),
+                forward_button: forward_button.clone(),
                 add_backup: add_backup.clone(),
             }
         ));
@@ -198,8 +224,8 @@ impl CreateEditUI {
 
         // Include.
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        vbox.set_widget_name("include_exclude_box");
-        hbox.append(&vbox);
+        vbox.set_widget_name("include_box");
+        stack.add_titled(&vbox, Some("include"), "Folders to include");
 
         let include_top = gtk::Box::new(gtk::Orientation::Horizontal, 16);
         vbox.append(&include_top);
@@ -224,8 +250,8 @@ impl CreateEditUI {
 
         // Exclude.
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        vbox.set_widget_name("include_exclude_box");
-        hbox.append(&vbox);
+        vbox.set_widget_name("exclude_box");
+        stack.add_titled(&vbox, Some("exclude"), "Patterns to exclude");
 
         let exclude_top = gtk::Box::new(gtk::Orientation::Horizontal, 16);
         vbox.append(&exclude_top);
@@ -266,20 +292,20 @@ impl CreateEditUI {
             exclude_list.append(&row);
         }
 
-        let include_app = application.clone();
         let include_self = myself.clone();
         add_include_button.connect_clicked(
             clone!(@weak include_list => move |_| {
-                let main_window = include_app.borrow().main_window.clone();
+                let parent_window = include_self.borrow().window.clone();
                 let file_picker = gtk::FileChooserDialog::new(
                     Some("Choose folder to include..."),
-                    Some(&main_window),
+                    Some(&parent_window),
                     gtk::FileChooserAction::SelectFolder,
                     &[
                         ("Cancel", gtk::ResponseType::Cancel),
                         ("Accept", gtk::ResponseType::Accept),
                     ]
                 );
+                file_picker.set_modal(true);
 
                 let picker_self = include_self.clone();
                 file_picker.run_async(move |dialog, response| {
@@ -303,6 +329,18 @@ impl CreateEditUI {
                  exclude_list.append(&row);
             })
         );
+
+        let back_self = myself.clone();
+        back_button.connect_clicked(move |_| {
+            let myself = back_self.borrow();
+            myself.go(Go::Back);
+        });
+
+        let forward_self = myself.clone();
+        forward_button.connect_clicked(move |_| {
+            let myself = forward_self.borrow();
+            myself.go(Go::Forward);
+        });
 
         let add_self = myself.clone();
         add_backup.connect_clicked(
@@ -371,9 +409,9 @@ impl CreateEditUI {
                                     ServerError::Configuration(e) |
                                     ServerError::RepoInit(e) => e,
                                 };
-                                let main_window = app.borrow().main_window.clone();
+                                let parent_window = myself.borrow().window.clone();
                                 let dialog = gtk::MessageDialogBuilder::new()
-                                    .transient_for(&main_window)
+                                    .transient_for(&parent_window)
                                     .modal(true)
                                     .message_type(gtk::MessageType::Error)
                                     .buttons(gtk::ButtonsType::Close)
@@ -384,7 +422,7 @@ impl CreateEditUI {
                                 dialog.close();
                             } else {
                                 myself.borrow_mut().clear();
-                                app.borrow_mut().set_stack_page(StackPage::Overview);
+                                app.borrow_mut().update();
                             }
                         },
                         Err(error) => {
@@ -420,6 +458,43 @@ impl CreateEditUI {
         drop(edit_ui);
 
         myself
+    }
+
+    fn go(&self, direction: Go) {
+        let current_page = self.stack.visible_child_name().unwrap().to_string();
+        if let Go::Back = direction {
+            match current_page.as_str() {
+                "repository" => unreachable!(),
+                "include" => {
+                    self.stack.set_visible_child_name("repository");
+                    self.back_button.set_sensitive(false);
+                },
+                "exclude" => {
+                    self.stack.set_visible_child_name("include");
+                    self.forward_button.set_visible(true);
+                    self.add_backup.set_visible(false);
+                },
+                _ => unreachable!(),
+            }
+         } else {
+            match current_page.as_str() {
+                "repository" => {
+                    self.stack.set_visible_child_name("include");
+                    self.back_button.set_sensitive(true);
+                },
+                "include" => {
+                    self.stack.set_visible_child_name("exclude");
+                    self.forward_button.set_visible(false);
+                    self.add_backup.set_visible(true);
+                },
+                "exclude" => unreachable!(),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    pub fn open(&self) {
+        self.window.present();
     }
 
     fn default_exclude_patterns(&mut self) -> Vec<gtk::ListBoxRow> {
@@ -490,7 +565,13 @@ impl CreateEditUI {
             })
         );
 
-        self.exclude.push(entry.upcast::<gtk::Editable>());
+        self.exclude.push(entry.clone().upcast::<gtk::Editable>());
+
+        // Schedule grabbing focus as trying to grab it now won't work.
+        glib::source::idle_add_local(move || {
+            entry.grab_focus();
+            glib::Continue(false)
+        });
 
         row
      }
@@ -549,22 +630,25 @@ impl CreateEditUI {
 
     fn update_state(&mut self) {
         // Start optimistic, see if anything makes us want to disable the button.
-        let mut add_backup_sensitive = true;
+        let mut sensitive = true;
 
         if self.name.text().to_string().trim().is_empty() {
-            add_backup_sensitive = false;
+            sensitive = false;
         }
 
         let password = self.password.text().to_string();
         let confirm = self.confirm.text().to_string();
         if password.is_empty() || password != confirm {
-            add_backup_sensitive = false;
+            sensitive = false;
         }
 
-        self.add_backup.set_sensitive(add_backup_sensitive);
+        self.forward_button.set_sensitive(sensitive);
+        self.add_backup.set_sensitive(sensitive);
     }
 
     fn clear(&mut self) {
+        self.window.hide();
+
         self.name.set_text("");
         self.kind.set_active_id(Some("Local"));
         self.identifier.set_text("");

@@ -6,47 +6,36 @@ mod server;
 mod edit;
 mod overview;
 
-pub enum StackPage {
-    Overview,
-    CreateEdit,
-}
-
 pub struct Application {
+    pub application: gtk::Application,
     pub main_window: gtk::ApplicationWindow,
     pub stack: gtk::Stack,
     pub create_button: gtk::Button,
-    pub back_button: gtk::Button,
     pub overview: Option<Rc<RefCell<overview::OverviewUI>>>,
+    pub create_edit: Option<Rc<RefCell<edit::CreateEditUI>>>,
 }
 
 impl Application {
-    fn new(main_window: gtk::ApplicationWindow, stack: gtk::Stack,
-        create_button: gtk::Button, back_button: gtk::Button) -> Rc<RefCell<Self>> {
+    fn new(application: gtk::Application, main_window: gtk::ApplicationWindow, stack: gtk::Stack,
+        create_button: gtk::Button) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(
             Application {
+                application,
                 main_window,
                 stack,
                 create_button,
-                back_button,
                 overview: None,
+                create_edit: None,
             }
         ))
     }
 
-    fn set_stack_page(&mut self, page: StackPage) {
-        match page {
-            StackPage::Overview => {
-                self.stack.set_visible_child_name("overview");
-                self.create_button.set_visible(true);
-                self.back_button.set_visible(false);
-                self.overview.as_mut().unwrap().borrow_mut().update();
-            },
-            StackPage::CreateEdit => {
-                self.stack.set_visible_child_name("create/edit");
-                self.create_button.set_visible(false);
-                self.back_button.set_visible(true);
-            },
-        }
+    fn open_create_edit(&self) {
+        self.create_edit.as_ref().unwrap().borrow().open();
+    }
+
+    fn update(&mut self) {
+        self.overview.as_mut().unwrap().borrow_mut().update();
     }
 }
 
@@ -83,30 +72,19 @@ fn create_ui(app: &gtk::Application) {
         .build();
     headerbar.pack_start(&create_button);
 
-    let back_button = gtk::ButtonBuilder::new()
-        .icon_name("go-previous-symbolic")
-        .build();
-    back_button.set_visible(false);
-    headerbar.pack_start(&back_button);
-
     let stack = gtk::Stack::new();
     window.set_child(Some(&stack));
 
     let application = Application::new(
+        app.clone(),
         window.clone(),
         stack.clone(),
         create_button.clone(),
-        back_button.clone(),
     );
 
     let app = application.clone();
     create_button.connect_clicked(move |_| {
-        app.borrow_mut().set_stack_page(StackPage::CreateEdit);
-    });
-
-    let app = application.clone();
-    back_button.connect_clicked(move |_| {
-        app.borrow_mut().set_stack_page(StackPage::Overview);
+        app.borrow().open_create_edit();
     });
 
     // Backups list
@@ -116,7 +94,7 @@ fn create_ui(app: &gtk::Application) {
 
     // Create/edit backup
     let create_edit = edit::CreateEditUI::new(application.clone());
-    stack.add_titled(&create_edit.borrow().container, Some("create/edit"), "Create or edit");
+    application.borrow_mut().create_edit.replace(create_edit.clone());
 
     window.present();
 }
