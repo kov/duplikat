@@ -1,4 +1,4 @@
-use crate::ServerError;
+use crate::{Backup, ServerError};
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -31,7 +31,7 @@ pub struct ResticMessageSummary {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResticMessageBackupsList {
-    pub list: Vec<String>
+    pub list: Vec<Backup>
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,5 +1,18 @@
 #overview_listbox {
-    margin: 30px;
+    margin: 16px;
+}
+
+#overview_listbox frame {
+    padding: 16px;
+}
+
+#overview_listbox frame > box {
+    margin-left: 16px;
+    margin-top: 6px;
+}
+
+#overview_listbox frame > label {
+    font-weight: bold;
 }
 
 #overview_listbox row {

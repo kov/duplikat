@@ -13,6 +13,7 @@ pub struct OverviewUI {
 
 struct BackupRow {
     bytes: gtk::Label,
+    files: gtk::Label,
 }
 
 fn to_human_readable(bytes: u64) -> String {
@@ -25,6 +26,38 @@ fn to_human_readable(bytes: u64) -> String {
         }
     }
     "NaN".to_string()
+}
+
+fn seconds_to_human_readable(seconds: u64) -> String {
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    let days = hours / 24;
+
+    if seconds < 60 {
+        if seconds > 1 {
+            format!("{} seconds", seconds)
+        } else {
+            format!("{} second", seconds)
+        }
+    } else if minutes < 60 {
+        if minutes > 1 {
+            format!("{} minutes", minutes)
+        } else {
+            format!("{} minute", minutes)
+        }
+    } else if hours < 24 {
+        if hours > 1 {
+            format!("{} hours", hours)
+        } else {
+            format!("{} hour", hours)
+        }
+    } else {
+        if days > 1 {
+            format!("{} days", days)
+        } else {
+            format!("{} day", days)
+        }
+    }
 }
 
 impl OverviewUI {
@@ -61,21 +94,35 @@ impl OverviewUI {
                     println!("Error listing backups: {:#?}", error);
                 };
 
+                let listbox = overview.borrow().container.clone();
+                while let Some(row) = listbox.row_at_index(0) {
+                    listbox.remove(&row);
+                }
+
                 while let Ok(message) = connection.read_message().await {
                     if let Some(message) = message {
                         dbg!(&message);
                         match message {
                             ResticMessage::BackupsList(backups) => {
-                                for name in backups.list {
-                                    let row = overview.borrow_mut().create_row_for_name(&name).clone();
-                                    overview.borrow().container.append(&row);
+                                for backup in backups.list {
+                                    let row = overview.borrow_mut().create_row_for_backup(&backup).clone();
+                                    listbox.append(&row);
                                 }
                             },
                             ResticMessage::BackupStats(stats) => {
                                 dbg!(&stats);
                                 let overview = overview.borrow_mut();
                                 let row = overview.rows.get(&stats.name).unwrap();
-                                row.bytes.set_text(&to_human_readable(stats.total_size));
+                                row.bytes.set_markup(
+                                    &format!("<b>Total size:</b> {}",
+                                        to_human_readable(stats.total_size)
+                                    )
+                                );
+                                row.files.set_markup(
+                                    &format!("<b>File count:</b> {}",
+                                        stats.total_file_count
+                                    )
+                                );
                             },
                             _ => unimplemented!(),
                         }
@@ -87,30 +134,90 @@ impl OverviewUI {
         );
     }
 
-    fn create_row_for_name(&mut self, name: &str) -> gtk::ListBoxRow {
+    fn create_row_for_backup(&mut self, backup: &Backup) -> gtk::ListBoxRow {
         let row = gtk::ListBoxRow::new();
 
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        row.set_child(Some(&hbox));
+        let frame = gtk::Frame::new(Some(&backup.name));
+        row.set_child(Some(&frame));
 
-        let label = gtk::Label::new(Some(name));
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        frame.set_child(Some(&vbox));
+
+        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        vbox.append(&hbox);
+
+        let mut type_text = String::new();
+        match backup.repository.kind {
+            RepositoryKind::Local => {
+                type_text.push_str(
+                    &format!("<b>Local</b> ({})",
+                        &backup.repository.path
+                    )
+                );
+            },
+            RepositoryKind::B2 => {
+                type_text.push_str(
+                    &format!("<b>Backblaze B2</b> ({}{})",
+                        &backup.repository.identifier,
+                        &backup.repository.path
+                    )
+                );
+            },
+            RepositoryKind::SFTP => {
+                type_text.push_str(
+                    &format!("<b>SFTP</b> ({}{})",
+                        &backup.repository.identifier,
+                        &backup.repository.path
+                    )
+                );
+            },
+        }
+
+        let label = gtk::Label::new(None);
+        label.set_markup(&type_text);
         hbox.append(&label);
 
-        let run_button = gtk::Button::with_label("Run");
-        hbox.append(&run_button);
+        // This should be a logo for the type of repository.
+        let logo = gtk::Image::from_icon_name(Some("image-x-generic"));
+        logo.set_halign(gtk::Align::End);
+        logo.set_hexpand(true);
+        hbox.append(&logo);
+
+        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        vbox.append(&hbox);
+
+        let bytes_label = gtk::Label::new(None);
+        bytes_label.set_markup("<b>Total size:</b> calculating...");
+        hbox.append(&bytes_label);
+
+         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        vbox.append(&hbox);
+
+        let files_label = gtk::Label::new(None);
+        files_label.set_markup("<b>File count:</b> calculating...");
+        hbox.append(&files_label);
 
         let progress_bar = gtk::ProgressBar::new();
-        progress_bar.set_valign(gtk::Align::Center);
-        progress_bar.set_halign(gtk::Align::Fill);
+        progress_bar.set_show_text(true);
+        progress_bar.set_halign(gtk::Align::End);
+        progress_bar.set_hexpand(true);
+        progress_bar.set_visible(false);
         hbox.append(&progress_bar);
+
+        let run_button = gtk::Button::with_label("Backup now");
+        run_button.set_halign(gtk::Align::End);
+        run_button.set_hexpand(true);
+        run_button.set_css_classes(&["suggested-action"]);
+        vbox.append(&run_button);
 
         // Make an owned instance so that it can be moved into the closure.
         let application = self.application.clone();
-        let backup_name = name.to_string();
+        let backup_name = backup.name.clone();
         run_button.connect_clicked(
-            clone!(@weak progress_bar => move |_| {
+            clone!(@weak progress_bar => move |button| {
                 let application = application.clone();
                 let name = backup_name.clone();
+                let button = button.clone();
                 MainContext::default().spawn_local(async move {
                     let run_backup_message = ClientMessage::RunBackup(
                         ClientMessageRunBackup {
@@ -118,7 +225,7 @@ impl OverviewUI {
                         }
                     );
 
-                    let connection = match Server::connect(application).await {
+                    let connection = match Server::connect(application.clone()).await {
                         Ok(c) => c,
                         Err(_) => return,
                     };
@@ -132,10 +239,24 @@ impl OverviewUI {
                         if let Some(message) = message {
                             match message {
                                 ResticMessage::Status(status) => {
+                                    button.set_visible(false);
+                                    progress_bar.set_visible(true);
                                     progress_bar.set_fraction(status.percent_done);
+                                    if let Some(seconds) = status.seconds_remaining {
+                                        let time_str = seconds_to_human_readable(seconds);
+                                        progress_bar.set_text(Some(
+                                            &format!("{}% ({} left)",
+                                                (status.percent_done * 100f64) as u64,
+                                                time_str
+                                            )
+                                        ));
+                                    }
                                 },
                                 ResticMessage::Summary(_) => {
-                                    progress_bar.set_fraction(1.);
+                                    button.set_visible(true);
+                                    progress_bar.set_visible(false);
+                                    progress_bar.set_fraction(0.);
+                                    application.borrow().overview.as_ref().unwrap().borrow().update();
                                 },
                                 _ => unimplemented!(),
                             }
@@ -147,15 +268,13 @@ impl OverviewUI {
             })
         );
 
-        let bytes_label = gtk::Label::new(None);
-        hbox.append(&bytes_label);
-
         // Add this row to our map, so we can easily access it when updating data
         // for a backup.
         self.rows.insert(
-            name.to_string(),
+            backup.name.clone(),
             BackupRow {
                 bytes: bytes_label,
+                files: files_label,
             }
         );
 

@@ -260,15 +260,18 @@ impl Configuration {
         let mut backups = vec![];
         while let Some(entry) = entries.next_entry().await.unwrap() {
             backups.push(
-                entry.file_name()
-                    .to_string_lossy()
-                    .to_string()
+                Self::backup_with_name(
+                    entry.file_name()
+                        .to_string_lossy()
+                        .to_string()
+                        .as_str()
+                ).await.unwrap()
             );
         }
 
         let stats_futures: Vec<_> = backups.iter()
-            .map(|name| {
-                Restic::stats_for(name.clone())
+            .map(|backup| {
+                Restic::stats_for(backup.name.clone())
             })
             .collect();
 
