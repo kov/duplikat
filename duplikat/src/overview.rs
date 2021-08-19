@@ -4,6 +4,7 @@ use glib::{MainContext, clone};
 use gtk::prelude::*;
 use crate::Application;
 use crate::server::Server;
+use crate::utils::next_row_num;
 
 pub struct OverviewUI {
     pub container: gtk::ListBox,
@@ -114,14 +115,10 @@ impl OverviewUI {
                                 let overview = overview.borrow_mut();
                                 let row = overview.rows.get(&stats.name).unwrap();
                                 row.bytes.set_markup(
-                                    &format!("<b>Total size:</b> {}",
-                                        to_human_readable(stats.total_size)
-                                    )
+                                    &to_human_readable(stats.total_size)
                                 );
                                 row.files.set_markup(
-                                    &format!("<b>File count:</b> {}",
-                                        stats.total_file_count
-                                    )
+                                    &format!("{}", stats.total_file_count)
                                 );
                             },
                             _ => unimplemented!(),
@@ -140,11 +137,8 @@ impl OverviewUI {
         let frame = gtk::Frame::new(Some(&backup.name));
         row.set_child(Some(&frame));
 
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
-        frame.set_child(Some(&vbox));
-
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        vbox.append(&hbox);
+        let grid = gtk::Grid::new();
+        frame.set_child(Some(&grid));
 
         let mut type_text = String::new();
         match backup.repository.kind {
@@ -173,48 +167,65 @@ impl OverviewUI {
             },
         }
 
+        let mut row_num = -1i32;
+
         let label = gtk::Label::new(None);
         label.set_markup(&type_text);
-        hbox.append(&label);
+
+        grid.attach(&label, 0, next_row_num(&mut row_num), 2, 1);
 
         // This should be a logo for the type of repository.
         let logo = gtk::Image::from_icon_name(Some("image-x-generic"));
         logo.set_halign(gtk::Align::End);
         logo.set_hexpand(true);
-        hbox.append(&logo);
 
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        vbox.append(&hbox);
+        grid.attach_next_to(&logo, Some(&label), gtk::PositionType::Right, 1, 1);
 
-        let bytes_label = gtk::Label::new(None);
-        bytes_label.set_markup("<b>Total size:</b> calculating...");
-        hbox.append(&bytes_label);
+        let label = gtk::Label::new(None);
+        label.set_markup("<b>Total size:</b>");
 
-         let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        vbox.append(&hbox);
+        grid.attach(&label, 0, next_row_num(&mut row_num), 1, 1);
 
-        let files_label = gtk::Label::new(None);
-        files_label.set_markup("<b>File count:</b> calculating...");
-        hbox.append(&files_label);
+        let bytes_label = gtk::Label::new(Some("calculating..."));
+
+        grid.attach_next_to(&bytes_label, Some(&label), gtk::PositionType::Right, 1, 1);
+
+        let label = gtk::Label::new(None);
+        label.set_markup("<b>File count:</b>");
+
+        grid.attach(&label, 0, next_row_num(&mut row_num), 1, 1);
+
+        let files_label = gtk::Label::new(Some("calculating..."));
+
+        grid.attach_next_to(&files_label, Some(&label), gtk::PositionType::Right, 1, 1);
 
         let progress_bar = gtk::ProgressBar::new();
         progress_bar.set_show_text(true);
-        progress_bar.set_halign(gtk::Align::End);
+        progress_bar.set_halign(gtk::Align::Fill);
         progress_bar.set_hexpand(true);
         progress_bar.set_visible(false);
-        hbox.append(&progress_bar);
+
+        grid.attach(&progress_bar, 0, next_row_num(&mut row_num), 2, 1);
 
         let run_button = gtk::Button::with_label("Backup now");
         run_button.set_halign(gtk::Align::End);
         run_button.set_hexpand(true);
         run_button.set_css_classes(&["suggested-action"]);
-        vbox.append(&run_button);
+
+        grid.attach_next_to(&run_button, Some(&progress_bar), gtk::PositionType::Right, 1, 1);
+
+        let cancel_button = gtk::Button::with_label("Cancel");
+        cancel_button.set_visible(false);
+        cancel_button.set_halign(gtk::Align::End);
+        cancel_button.set_hexpand(true);
+
+        grid.attach_next_to(&cancel_button, Some(&progress_bar), gtk::PositionType::Right, 1, 1);
 
         // Make an owned instance so that it can be moved into the closure.
         let application = self.application.clone();
         let backup_name = backup.name.clone();
         run_button.connect_clicked(
-            clone!(@weak progress_bar => move |button| {
+            clone!(@weak progress_bar, @weak cancel_button => move |button| {
                 let application = application.clone();
                 let name = backup_name.clone();
                 let button = button.clone();
@@ -240,6 +251,7 @@ impl OverviewUI {
                             match message {
                                 ResticMessage::Status(status) => {
                                     button.set_visible(false);
+                                    cancel_button.set_visible(true);
                                     progress_bar.set_visible(true);
                                     progress_bar.set_fraction(status.percent_done);
                                     if let Some(seconds) = status.seconds_remaining {
@@ -254,6 +266,7 @@ impl OverviewUI {
                                 },
                                 ResticMessage::Summary(_) => {
                                     button.set_visible(true);
+                                    cancel_button.set_visible(false);
                                     progress_bar.set_visible(false);
                                     progress_bar.set_fraction(0.);
                                     application.borrow().overview.as_ref().unwrap().borrow().update();

@@ -5,6 +5,7 @@ use gtk::prelude::*;
 mod server;
 mod edit;
 mod overview;
+mod utils;
 
 pub struct Application {
     pub application: gtk::Application,

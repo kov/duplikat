@@ -7,6 +7,7 @@ use duplikat_types::*;
 use strum::IntoEnumIterator;
 use crate::Application;
 use crate::server::Server;
+use crate::utils::next_row_num;
 
 pub struct CreateEditUI {
     pub window: gtk::Dialog,
@@ -30,11 +31,6 @@ pub struct CreateEditUI {
 enum Go {
     Back,
     Forward,
-}
-
-fn next_row_num(num: &mut i32) -> i32 {
-    *num += 1;
-    *num
 }
 
 impl CreateEditUI {
@@ -274,6 +270,22 @@ impl CreateEditUI {
         exclude_list.set_css_classes(&["rich-list"]);
         vbox.append(&exclude_list);
 
+        // Feedback page
+        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 16);
+        vbox.set_valign(gtk::Align::Fill);
+        stack.add_titled(&vbox, Some("feedback"), "Feedback screen");
+
+        let spinner = gtk::Spinner::new();
+        spinner.set_valign(gtk::Align::End);
+        spinner.set_vexpand(true);
+        spinner.start();
+        vbox.append(&spinner);
+
+        let label = gtk::Label::new(Some("Initializing repository..."));
+        label.set_valign(gtk::Align::Start);
+        label.set_vexpand(true);
+        vbox.append(&label);
+
         // Create a local mutable borrow of self so we can properly
         // add default entries to include/exclude and connect signals.
         let mut edit_ui = myself.borrow_mut();
@@ -347,6 +359,14 @@ impl CreateEditUI {
             clone!(@weak name_entry, @weak type_combo, @weak identifier, @weak path,
                 @weak key_entry, @weak secret_entry,
                 @weak password => move |_| {
+                // Go to feedback page, so the user has some feedback that things are ongoing.
+                // Run the main loop to make sure we do that before we start the work, so there
+                // is no "hang" from the user's perspective.
+                add_self.borrow().go(Go::Forward);
+                while glib::MainContext::default().pending() {
+                    glib::MainContext::default().dispatch();
+                }
+
                 let repo_type = type_combo.active_id()
                     .expect("Combo box should never be empty")
                     .to_string();
@@ -420,6 +440,11 @@ impl CreateEditUI {
                                     .build();
                                 dialog.run_future().await;
                                 dialog.close();
+
+                                // If adding the backup failed, the error lies in the repository
+                                // definition.
+                                myself.borrow_mut().stack.set_visible_child_name("repository");
+                                myself.borrow_mut().update_state();
                             } else {
                                 myself.borrow_mut().clear();
                                 app.borrow_mut().update();
@@ -447,8 +472,8 @@ impl CreateEditUI {
                 // If we are clearing the form after a backup was added, this handler
                 // will be triggered, but the edit ui will be borrowed mutably by the
                 // clear method. We don't need to care about state, as it will be reset.
-                match edit_ui.try_borrow_mut() {
-                    Ok(mut edit_ui) => edit_ui.update_state(),
+                match edit_ui.try_borrow() {
+                    Ok(edit_ui) => edit_ui.update_state(),
                     Err(_) => (),
                 }
             });
@@ -467,12 +492,9 @@ impl CreateEditUI {
                 "repository" => unreachable!(),
                 "include" => {
                     self.stack.set_visible_child_name("repository");
-                    self.back_button.set_sensitive(false);
                 },
                 "exclude" => {
                     self.stack.set_visible_child_name("include");
-                    self.forward_button.set_visible(true);
-                    self.add_backup.set_visible(false);
                 },
                 _ => unreachable!(),
             }
@@ -480,17 +502,18 @@ impl CreateEditUI {
             match current_page.as_str() {
                 "repository" => {
                     self.stack.set_visible_child_name("include");
-                    self.back_button.set_sensitive(true);
                 },
                 "include" => {
                     self.stack.set_visible_child_name("exclude");
-                    self.forward_button.set_visible(false);
-                    self.add_backup.set_visible(true);
                 },
-                "exclude" => unreachable!(),
+                "exclude" => {
+                    self.stack.set_visible_child_name("feedback");
+                },
                 _ => unreachable!(),
             }
         }
+
+        self.update_state();
     }
 
     pub fn open(&self) {
@@ -628,8 +651,36 @@ impl CreateEditUI {
         self.myself.as_ref().unwrap().clone()
     }
 
-    fn update_state(&mut self) {
-        // Start optimistic, see if anything makes us want to disable the button.
+    fn update_state(&self) {
+        // First adjust based on current page.
+        let current_page = self.stack.visible_child_name().unwrap().to_string();
+        match current_page.as_str() {
+            "repository" => {
+                self.back_button.set_visible(true);
+                self.back_button.set_sensitive(false);
+                self.forward_button.set_visible(true);
+                self.add_backup.set_visible(false);
+            },
+            "include" => {
+                self.back_button.set_sensitive(true);
+                self.forward_button.set_visible(true);
+                self.add_backup.set_visible(false);
+            },
+            "exclude" => {
+                self.back_button.set_sensitive(true);
+                self.forward_button.set_visible(false);
+                self.add_backup.set_visible(true);
+            },
+            "feedback" => {
+                self.back_button.set_visible(false);
+                self.forward_button.set_visible(false);
+                self.add_backup.set_visible(false);
+            },
+            _ => unreachable!(),
+        }
+
+        // Now do some basic validation. Start optimistic, see if anything
+        // makes us want to disable the button.
         let mut sensitive = true;
 
         if self.name.text().to_string().trim().is_empty() {
@@ -660,5 +711,8 @@ impl CreateEditUI {
         self.include.iter_mut()
             .for_each(|entry| entry.set_text(""));
         self.add_backup.set_sensitive(false);
+
+        self.stack.set_visible_child_name("repository");
+        self.update_state();
     }
 }
