@@ -102,7 +102,6 @@ impl OverviewUI {
 
                 while let Ok(message) = connection.read_message().await {
                     if let Some(message) = message {
-                        dbg!(&message);
                         match message {
                             ResticMessage::BackupsList(backups) => {
                                 for backup in backups.list {
@@ -111,7 +110,6 @@ impl OverviewUI {
                                 }
                             },
                             ResticMessage::BackupStats(stats) => {
-                                dbg!(&stats);
                                 let overview = overview.borrow_mut();
                                 let row = overview.rows.get(&stats.name).unwrap();
                                 row.bytes.set_markup(

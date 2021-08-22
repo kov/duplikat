@@ -29,7 +29,6 @@ impl Restic {
         }
 
         if let Err(error) = Restic::create_repo(&backup.name).await {
-            dbg!(&error);
             send_json(
                 &json!({
                     "error": Some(ServerError::RepoInit(
@@ -52,7 +51,6 @@ impl Restic {
 
     pub(crate) async fn create_repo(name: &str) -> Result<()> {
         let environment = Configuration::environment_for_name(name).await;
-        dbg!(&environment);
         let child = Command::new("restic")
             .args(&[
                 "--json",
@@ -69,10 +67,8 @@ impl Restic {
         let mut output = String::new();
         stderr.read_to_string(&mut output).unwrap();
         if !output.is_empty() {
-            dbg!(&output);
             bail!(output)
         }
-        dbg!("OK?");
         Ok(())
     }
 

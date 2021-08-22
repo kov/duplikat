@@ -423,7 +423,6 @@ impl CreateEditUI {
 
                     match connection.read_response().await {
                         Ok(response) => {
-                            dbg!(&response);
                             if let Some(error) = response.error {
                                 let error = match error {
                                     ServerError::Configuration(e) |
