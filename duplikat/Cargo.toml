@@ -6,6 +6,7 @@ edition = "2018"
 
 [build-dependencies]
 gbuild = "0.1"
+log = "0.4"
 
 [dependencies]
 dirs = "3.0"

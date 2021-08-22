@@ -1,10 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use gtk::prelude::*;
+use crate::prefix::PREFIX;
 
 mod server;
 mod edit;
 mod overview;
+mod prefix;
 mod utils;
 
 pub struct Application {
@@ -41,6 +43,7 @@ impl Application {
 }
 
 fn main() {
+    dbg!("{}", PREFIX);
     gtk::init().unwrap_or_else(|_| panic!("Failed to initialize GTK."));
 
     let css_provider = gtk::CssProvider::new();
